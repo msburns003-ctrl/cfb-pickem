@@ -231,7 +231,8 @@ export default function AdminWeekDetailPage() {
                     </p>
                     <p className="text-xs text-muted-foreground">
                       {game.favoriteTeam} -{game.spread} · {game.pickType} ·{" "}
-                      {new Date(game.kickoff).toLocaleString("en-US", { weekday: "short", hour: "numeric", minute: "2-digit" })}
+                      {new Date(game.kickoff).toLocaleString("en-US", { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
+                      {game.broadcast ? ` · ${game.broadcast}` : ""}
                     </p>
                   </div>
                   <div className="flex w-full flex-wrap items-center gap-3 sm:w-auto sm:justify-end">
