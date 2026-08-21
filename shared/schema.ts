@@ -37,7 +37,7 @@ export const weeks = sqliteTable("weeks", {
 });
 
 export const insertWeekSchema = createInsertSchema(weeks).omit({ id: true });
-export type InsertWeek = z.infer<typeof insertWeekSchema>;
+export type InsertWeek = typeof weeks.$inferInsert;
 export type Week = typeof weeks.$inferSelect;
 
 // ---------- Games ----------
@@ -69,7 +69,7 @@ export const games = sqliteTable("games", {
 });
 
 export const insertGameSchema = createInsertSchema(games).omit({ id: true });
-export type InsertGame = z.infer<typeof insertGameSchema>;
+export type InsertGame = typeof games.$inferInsert;
 export type Game = typeof games.$inferSelect;
 
 // ---------- Picks ----------
@@ -98,7 +98,7 @@ export const insertPickSchema = createInsertSchema(picks).omit({
   isCorrect: true,
   pointsEarned: true,
 });
-export type InsertPick = z.infer<typeof insertPickSchema>;
+export type InsertPick = typeof picks.$inferInsert;
 export type Pick = typeof picks.$inferSelect;
 
 // ---------- Upset Picks (bonus weekly pick) ----------
@@ -134,5 +134,5 @@ export const insertUpsetPickSchema = createInsertSchema(upsetPicks).omit({
   result: true,
   pointsEarned: true,
 });
-export type InsertUpsetPick = z.infer<typeof insertUpsetPickSchema>;
+export type InsertUpsetPick = typeof upsetPicks.$inferInsert;
 export type UpsetPick = typeof upsetPicks.$inferSelect;

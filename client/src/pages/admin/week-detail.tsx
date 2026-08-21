@@ -234,22 +234,22 @@ export default function AdminWeekDetailPage() {
                       {new Date(game.kickoff).toLocaleString("en-US", { weekday: "short", hour: "numeric", minute: "2-digit" })}
                     </p>
                   </div>
-                  <div className="flex items-center gap-3">
+                  <div className="flex w-full flex-wrap items-center gap-3 sm:w-auto sm:justify-end">
                     {game.status === "final" ? (
                       <Badge variant="outline">
                         Final {game.awayScore}-{game.homeScore}
                       </Badge>
                     ) : (
-                      <div className="flex items-center gap-1">
+                      <div className="flex items-center gap-1 flex-wrap">
                         <Input
-                          className="h-8 w-14"
+                          className="h-8 w-20"
                           placeholder="Away"
                           value={draft.away}
                           onChange={(e) => setScoreDrafts((d) => ({ ...d, [game.id]: { ...draft, away: e.target.value } }))}
                           data-testid={`input-away-score-${game.id}`}
                         />
                         <Input
-                          className="h-8 w-14"
+                          className="h-8 w-20"
                           placeholder="Home"
                           value={draft.home}
                           onChange={(e) => setScoreDrafts((d) => ({ ...d, [game.id]: { ...draft, home: e.target.value } }))}

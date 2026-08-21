@@ -52,6 +52,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                       : "text-sidebar-foreground/70 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground",
                   )}
                   data-testid={`link-nav-${item.label.toLowerCase().replace(/\s/g, "-")}`}
+                  aria-label={item.label}
                 >
                   <Icon className="h-4 w-4" />
                   <span className="hidden sm:inline">{item.label}</span>

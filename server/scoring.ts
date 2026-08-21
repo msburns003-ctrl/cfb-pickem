@@ -169,7 +169,7 @@ export async function computeStandings(): Promise<StandingsRow[]> {
     }
   }
 
-  const rows: StandingsRow[] = [...totals.entries()].map(([userId, v]) => ({
+  const rows: StandingsRow[] = Array.from(totals.entries()).map(([userId, v]) => ({
     userId,
     name: v.name,
     weeklyPoints: v.weeklyPoints,

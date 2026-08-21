@@ -4,7 +4,7 @@ import type { Server } from "node:http";
 import { storage } from "./storage";
 import { hashPassword, verifyPassword, generateToken, generateTempPassword, requireAuth, requireAdmin, toPublicUser } from "./auth";
 import { computePickType, gradeWeek, upsetPickPoints, computeStandings, ATS_THRESHOLD } from "./scoring";
-import { insertWeekSchema } from "@shared/schema";
+import { insertWeekSchema, type InsertWeek } from "@shared/schema";
 import { z } from "zod";
 
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
@@ -205,7 +205,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.post("/api/admin/weeks", requireAdmin, async (req, res) => {
     const parsed = insertWeekSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: "Invalid week data", errors: parsed.error.issues });
-    const week = await storage.createWeek(parsed.data);
+    const week = await storage.createWeek(parsed.data as InsertWeek);
     res.json({ week });
   });
 
