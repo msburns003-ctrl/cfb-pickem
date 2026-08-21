@@ -270,6 +270,27 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json({ week: updated });
   });
 
+  app.delete("/api/admin/weeks/:id", requireAdmin, async (req, res) => {
+    const weekId = Number(req.params.id);
+    const week = await storage.getWeek(weekId);
+    if (!week) return res.status(404).json({ message: "Week not found" });
+
+    const weekPicks = await storage.listPicksByWeek(weekId);
+    const weekUpsetPicks = await storage.listUpsetPicksByWeek(weekId);
+    const pickCount = weekPicks.length + weekUpsetPicks.length;
+
+    if (pickCount > 0 && req.query.force !== "true") {
+      return res.status(409).json({
+        message: `This week has ${pickCount} submitted pick(s). Deleting it will permanently erase them. Confirm to proceed.`,
+        pickCount,
+        requiresConfirmation: true,
+      });
+    }
+
+    await storage.deleteWeek(weekId);
+    res.json({ success: true });
+  });
+
   app.get("/api/admin/weeks/:id", requireAdmin, async (req, res) => {
     const weekId = Number(req.params.id);
     const week = await storage.getWeek(weekId);

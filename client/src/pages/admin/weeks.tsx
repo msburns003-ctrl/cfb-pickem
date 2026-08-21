@@ -8,8 +8,18 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, ChevronRight } from "lucide-react";
+import { Plus, ChevronRight, Trash2 } from "lucide-react";
 import type { Week } from "@shared/schema";
 
 const statusColors: Record<Week["status"], string> = {
@@ -41,6 +51,38 @@ export default function AdminWeeksPage() {
       toast({ title: "Week created" });
     },
     onError: (err) => toast({ title: "Couldn't create week", description: err instanceof Error ? err.message : undefined, variant: "destructive" }),
+  });
+
+  const [weekToDelete, setWeekToDelete] = useState<Week | null>(null);
+  const [pendingPickCount, setPendingPickCount] = useState<number | null>(null);
+
+  const deleteMutation = useMutation({
+    mutationFn: async ({ id, force }: { id: number; force: boolean }) => {
+      const res = await apiRequest("DELETE", `/api/admin/weeks/${id}${force ? "?force=true" : ""}`, undefined, {
+        allowStatuses: [409],
+      });
+      if (res.status === 409) {
+        const body = await res.json();
+        throw Object.assign(new Error(body.message), { pickCount: body.pickCount as number });
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/weeks"] });
+      setWeekToDelete(null);
+      setPendingPickCount(null);
+      toast({ title: "Week deleted" });
+    },
+    onError: (err: any) => {
+      if (typeof err?.pickCount === "number") {
+        // Week has submitted picks — show the stronger warning and require a second confirm.
+        setPendingPickCount(err.pickCount);
+        return;
+      }
+      toast({ title: "Couldn't delete week", description: err instanceof Error ? err.message : undefined, variant: "destructive" });
+      setWeekToDelete(null);
+      setPendingPickCount(null);
+    },
   });
 
   const weeks = data?.weeks ?? [];
@@ -127,22 +169,38 @@ export default function AdminWeeksPage() {
 
       <div className="flex flex-col gap-2">
         {weeks.map((week) => (
-          <Link key={week.id} href={`/admin/weeks/${week.id}`}>
-            <Card className="cursor-pointer hover-elevate" data-testid={`card-week-${week.id}`}>
-              <CardContent className="flex items-center justify-between p-4">
-                <div>
+          <Card key={week.id} className="hover-elevate" data-testid={`card-week-${week.id}`}>
+            <CardContent className="flex items-center justify-between p-4">
+              <Link href={`/admin/weeks/${week.id}`} className="flex-1">
+                <div className="cursor-pointer">
                   <p className="font-medium">{week.label}</p>
                   <p className="text-xs text-muted-foreground">
                     Locks {new Date(week.pickDeadline).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" })}
                   </p>
                 </div>
-                <div className="flex items-center gap-2">
-                  <Badge className={statusColors[week.status]}>{week.status}</Badge>
-                  <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                </div>
-              </CardContent>
-            </Card>
-          </Link>
+              </Link>
+              <div className="flex items-center gap-2">
+                <Badge className={statusColors[week.status]}>{week.status}</Badge>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="text-muted-foreground hover:text-destructive"
+                  data-testid={`button-delete-week-${week.id}`}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setPendingPickCount(null);
+                    setWeekToDelete(week);
+                  }}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+                <Link href={`/admin/weeks/${week.id}`}>
+                  <ChevronRight className="h-4 w-4 text-muted-foreground cursor-pointer" />
+                </Link>
+              </div>
+            </CardContent>
+          </Card>
         ))}
         {weeks.length === 0 && (
           <p className="rounded-lg border border-dashed border-border p-8 text-center text-muted-foreground">
@@ -150,6 +208,35 @@ export default function AdminWeeksPage() {
           </p>
         )}
       </div>
+
+      <AlertDialog open={!!weekToDelete} onOpenChange={(isOpen) => { if (!isOpen) { setWeekToDelete(null); setPendingPickCount(null); } }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {pendingPickCount != null ? "This week has submitted picks" : `Delete ${weekToDelete?.label}?`}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingPickCount != null
+                ? `${weekToDelete?.label} has ${pendingPickCount} submitted pick(s). Deleting it will permanently erase those picks along with its games. This can't be undone. Delete anyway?`
+                : `This will permanently delete ${weekToDelete?.label} and all of its games. This can't be undone.`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-delete-week">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={deleteMutation.isPending}
+              data-testid="button-confirm-delete-week"
+              onClick={() => {
+                if (!weekToDelete) return;
+                deleteMutation.mutate({ id: weekToDelete.id, force: pendingPickCount != null });
+              }}
+            >
+              {pendingPickCount != null ? "Delete anyway" : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

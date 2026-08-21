@@ -67,6 +67,7 @@ export interface IStorage {
   getWeek(id: number): Promise<Week | undefined>;
   createWeek(week: InsertWeek): Promise<Week>;
   updateWeek(id: number, fields: Partial<Week>): Promise<Week | undefined>;
+  deleteWeek(id: number): Promise<void>;
 
   // games
   listGamesByWeek(weekId: number): Promise<Game[]>;
@@ -163,6 +164,21 @@ export class DatabaseStorage implements IStorage {
     const { data, error } = await supabase.from("weeks").update(payload).eq("id", id).select().maybeSingle();
     assertNoError(error, "updateWeek");
     return rowToCamel<Week>(data);
+  }
+  async deleteWeek(id: number): Promise<void> {
+    // Cascade manually: picks reference games (not weeks directly), so resolve
+    // this week's game IDs first, then delete picks -> upset_picks -> games -> week.
+    const gameIds = await this.gameIdsForWeek(id);
+    if (gameIds.length > 0) {
+      const { error: picksError } = await supabase.from("picks").delete().in("game_id", gameIds);
+      assertNoError(picksError, "deleteWeek(picks)");
+    }
+    const { error: upsetError } = await supabase.from("upset_picks").delete().eq("week_id", id);
+    assertNoError(upsetError, "deleteWeek(upset_picks)");
+    const { error: gamesError } = await supabase.from("games").delete().eq("week_id", id);
+    assertNoError(gamesError, "deleteWeek(games)");
+    const { error: weekError } = await supabase.from("weeks").delete().eq("id", id);
+    assertNoError(weekError, "deleteWeek(week)");
   }
 
   // ---------- games ----------

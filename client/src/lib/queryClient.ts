@@ -28,6 +28,7 @@ export async function apiRequest(
   method: string,
   url: string,
   data?: unknown | undefined,
+  opts?: { allowStatuses?: number[] },
 ): Promise<Response> {
   const res = await fetch(`${API_BASE}${url}`, {
     method,
@@ -35,7 +36,9 @@ export async function apiRequest(
     body: data ? JSON.stringify(data) : undefined,
   });
 
-  await throwIfResNotOk(res);
+  if (!opts?.allowStatuses?.includes(res.status)) {
+    await throwIfResNotOk(res);
+  }
   return res;
 }
 
