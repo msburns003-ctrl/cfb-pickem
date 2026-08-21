@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { useLocation } from "wouter";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,7 +9,6 @@ import { Loader2 } from "lucide-react";
 
 export default function LoginPage() {
   const { login } = useAuth();
-  const [, navigate] = useLocation();
   const { toast } = useToast();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -21,7 +19,6 @@ export default function LoginPage() {
     setSubmitting(true);
     try {
       await login(email, password);
-      navigate("/dashboard");
     } catch (err) {
       toast({
         title: "Couldn't sign in",

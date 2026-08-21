@@ -33,10 +33,17 @@ function Protected({ children, adminOnly = false }: { children: ReactNode; admin
   return <AppShell>{children}</AppShell>;
 }
 
+function LoginRoute() {
+  const { user, loading } = useAuth();
+  if (loading) return <FullScreenLoader />;
+  if (user) return <Redirect to="/dashboard" />;
+  return <LoginPage />;
+}
+
 function AppRouter() {
   return (
     <Switch>
-      <Route path="/login" component={LoginPage} />
+      <Route path="/login" component={LoginRoute} />
       <Route path="/dashboard">
         <Protected>
           <DashboardPage />
