@@ -8,41 +8,6 @@ import { insertWeekSchema, type InsertWeek } from "@shared/schema";
 import { z } from "zod";
 
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
-  // ---------------- TEMP DIAGNOSTIC (remove after debugging) ----------------
-  app.get("/api/_diag", async (_req, res) => {
-    const out: Record<string, any> = {
-      hasUrl: !!process.env.SUPABASE_URL,
-      hasKey: !!process.env.SUPABASE_ANON_KEY,
-      urlPrefix: (process.env.SUPABASE_URL || "").slice(0, 30),
-    };
-    try {
-      const rawUrl = `${process.env.SUPABASE_URL}/rest/v1/users?select=id&limit=1`;
-      const started = Date.now();
-      const r = await fetch(rawUrl, {
-        headers: {
-          apikey: process.env.SUPABASE_ANON_KEY || "",
-          Authorization: `Bearer ${process.env.SUPABASE_ANON_KEY || ""}`,
-        },
-      });
-      out.rawFetchMs = Date.now() - started;
-      out.rawFetchStatus = r.status;
-      out.rawFetchBody = (await r.text()).slice(0, 300);
-    } catch (e: any) {
-      out.rawFetchError = String(e?.message || e);
-      out.rawFetchStack = String(e?.stack || "").slice(0, 800);
-    }
-    try {
-      const started2 = Date.now();
-      const users = await storage.getUserByEmail("msburns003@gmail.com");
-      out.storageMs = Date.now() - started2;
-      out.storageFound = !!users;
-    } catch (e: any) {
-      out.storageError = String(e?.message || e);
-      out.storageStack = String(e?.stack || "").slice(0, 800);
-    }
-    res.json(out);
-  });
-
   // ---------------- AUTH ----------------
   app.post("/api/auth/login", async (req, res) => {
     const schema = z.object({ email: z.string().email(), password: z.string().min(1) });

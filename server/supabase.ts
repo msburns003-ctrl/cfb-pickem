@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import ws from "ws";
 
 // The client is created lazily (on first use) rather than at module-load time,
 // so that a missing env var surfaces as a clear runtime error on the first API
@@ -26,6 +27,14 @@ function getClient(): SupabaseClient {
     auth: {
       persistSession: false,
       autoRefreshToken: false,
+    },
+    // Node 20 has no native WebSocket global. supabase-js always constructs
+    // a RealtimeClient internally (even though this app never opens a
+    // realtime channel), and that constructor throws immediately if no
+    // WebSocket implementation is available. Supplying the `ws` package
+    // here satisfies that constructor without us using realtime features.
+    realtime: {
+      transport: ws as any,
     },
   });
   return cached;
