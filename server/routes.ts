@@ -168,7 +168,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const selectedGames = allGames.filter((g) => g.isSelected);
     const weekPicks = await storage.listPicksByWeek(weekId);
     const weekUpsetPicks = await storage.listUpsetPicksByWeek(weekId);
-    const members = (await storage.listUsers()).filter((m) => !m.isAdmin);
+    const members = await storage.listUsers();
 
     const grid = members.map((m) => {
       const picksByGame: Record<number, { selectedTeam: string; isCorrect: boolean | null }> = {};
@@ -277,7 +277,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const allGames = await storage.listGamesByWeek(weekId);
     const weekPicks = await storage.listPicksByWeek(weekId);
     const weekUpsetPicks = await storage.listUpsetPicksByWeek(weekId);
-    const members = (await storage.listUsers()).filter((m) => !m.isAdmin);
+    const members = await storage.listUsers();
 
     const pickProgress = members.map((m) => ({
       userId: m.id,
