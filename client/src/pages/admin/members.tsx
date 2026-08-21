@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, KeyRound, Trash2 } from "lucide-react";
+import { Plus, KeyRound, Trash2, Pencil } from "lucide-react";
 import type { PublicUser } from "@shared/schema";
 
 export default function AdminMembersPage() {
@@ -18,6 +18,8 @@ export default function AdminMembersPage() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [credentials, setCredentials] = useState<{ email: string; tempPassword: string } | null>(null);
+  const [renameTarget, setRenameTarget] = useState<PublicUser | null>(null);
+  const [renameValue, setRenameValue] = useState("");
 
   const addMutation = useMutation({
     mutationFn: async () => {
@@ -45,6 +47,19 @@ export default function AdminMembersPage() {
   const deleteMutation = useMutation({
     mutationFn: async (id: number) => apiRequest("DELETE", `/api/admin/members/${id}`),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/admin/members"] }),
+  });
+
+  const renameMutation = useMutation({
+    mutationFn: async ({ id, name }: { id: number; name: string }) => {
+      const res = await apiRequest("PATCH", `/api/admin/members/${id}`, { name });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/members"] });
+      setRenameTarget(null);
+      toast({ title: "Name updated" });
+    },
+    onError: (err) => toast({ title: "Couldn't update name", description: err instanceof Error ? err.message : undefined, variant: "destructive" }),
   });
 
   const members = data?.members ?? [];
@@ -102,6 +117,18 @@ export default function AdminMembersPage() {
               <p className="text-xs text-muted-foreground">{m.email}</p>
             </div>
             <div className="flex items-center gap-1">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => {
+                  setRenameTarget(m);
+                  setRenameValue(m.name);
+                }}
+                title="Rename member"
+                data-testid={`button-rename-${m.id}`}
+              >
+                <Pencil className="h-4 w-4" />
+              </Button>
               <Button variant="ghost" size="icon" onClick={() => resetMutation.mutate(m.id)} title="Reset password" data-testid={`button-reset-${m.id}`}>
                 <KeyRound className="h-4 w-4" />
               </Button>
@@ -122,6 +149,27 @@ export default function AdminMembersPage() {
           </div>
         ))}
       </div>
+
+      <Dialog open={!!renameTarget} onOpenChange={(o) => !o && setRenameTarget(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Rename member</DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col gap-1.5">
+            <Label>Name</Label>
+            <Input value={renameValue} onChange={(e) => setRenameValue(e.target.value)} data-testid="input-rename-name" />
+          </div>
+          <DialogFooter>
+            <Button
+              onClick={() => renameTarget && renameMutation.mutate({ id: renameTarget.id, name: renameValue })}
+              disabled={!renameValue.trim() || renameMutation.isPending}
+              data-testid="button-save-rename"
+            >
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -34,6 +34,8 @@ export const weeks = sqliteTable("weeks", {
   status: text("status", { enum: ["setup", "open", "locked", "graded"] })
     .notNull()
     .default("setup"),
+  payoutAmount: real("payout_amount"),
+  payoutPaid: integer("payout_paid", { mode: "boolean" }).notNull().default(false),
 });
 
 export const insertWeekSchema = createInsertSchema(weeks).omit({ id: true });

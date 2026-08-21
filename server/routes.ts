@@ -152,6 +152,51 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json({ rows, weeks: gradedWeeks });
   });
 
+  // ---------------- PICKS GRID ----------------
+  app.get("/api/weeks/:id/grid", requireAuth, async (req, res) => {
+    const weekId = Number(req.params.id);
+    const week = await storage.getWeek(weekId);
+    if (!week) return res.status(404).json({ message: "Week not found" });
+
+    const now = Date.now();
+    const locked = week.status !== "open" || now >= new Date(week.pickDeadline).getTime();
+    if (!locked) {
+      return res.status(403).json({ message: "The picks grid unlocks once this week's picks are locked." });
+    }
+
+    const allGames = await storage.listGamesByWeek(weekId);
+    const selectedGames = allGames.filter((g) => g.isSelected);
+    const weekPicks = await storage.listPicksByWeek(weekId);
+    const weekUpsetPicks = await storage.listUpsetPicksByWeek(weekId);
+    const members = (await storage.listUsers()).filter((m) => !m.isAdmin);
+
+    const grid = members.map((m) => {
+      const picksByGame: Record<number, { selectedTeam: string; isCorrect: boolean | null }> = {};
+      for (const p of weekPicks) {
+        if (p.userId === m.id) {
+          picksByGame[p.gameId] = { selectedTeam: p.selectedTeam, isCorrect: p.isCorrect ?? null };
+        }
+      }
+      const upset = weekUpsetPicks.find((u) => u.userId === m.id) ?? null;
+      return {
+        userId: m.id,
+        name: m.name,
+        picks: picksByGame,
+        upsetPick: upset
+          ? {
+              underdogTeam: upset.underdogTeam,
+              favoriteTeam: upset.favoriteTeam,
+              spread: upset.spread,
+              result: upset.result,
+              pointsEarned: upset.pointsEarned,
+            }
+          : null,
+      };
+    });
+
+    res.json({ week, games: selectedGames, grid });
+  });
+
   // ---------------- ADMIN: MEMBERS ----------------
   app.get("/api/admin/members", requireAdmin, async (_req, res) => {
     const members = await storage.listUsers();
@@ -215,6 +260,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       pickDeadline: z.string().optional(),
       moneyGameCount: z.number().int().min(0).optional(),
       status: z.enum(["setup", "open", "locked", "graded"]).optional(),
+      payoutAmount: z.number().min(0).nullable().optional(),
+      payoutPaid: z.boolean().optional(),
     });
     const parsed = schema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: "Invalid fields" });
@@ -239,7 +286,24 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       hasUpsetPick: weekUpsetPicks.some((u) => u.userId === m.id),
     }));
 
-    res.json({ week, games: allGames, pickProgress, ATS_THRESHOLD });
+    const hasGradedPoints = weekPicks.some((p) => p.pointsEarned != null) || weekUpsetPicks.some((u) => u.pointsEarned != null);
+    let weeklyWinners: { userId: number; name: string; points: number }[] = [];
+    if (hasGradedPoints) {
+      const pointsByUser = new Map<number, number>();
+      for (const m of members) pointsByUser.set(m.id, 0);
+      for (const p of weekPicks) {
+        if (p.pointsEarned != null) pointsByUser.set(p.userId, (pointsByUser.get(p.userId) ?? 0) + p.pointsEarned);
+      }
+      for (const u of weekUpsetPicks) {
+        pointsByUser.set(u.userId, (pointsByUser.get(u.userId) ?? 0) + u.pointsEarned);
+      }
+      const maxPoints = Math.max(...Array.from(pointsByUser.values()));
+      weeklyWinners = members
+        .filter((m) => pointsByUser.get(m.id) === maxPoints)
+        .map((m) => ({ userId: m.id, name: m.name, points: maxPoints }));
+    }
+
+    res.json({ week, games: allGames, pickProgress, ATS_THRESHOLD, weeklyWinners });
   });
 
   // ---------------- ADMIN: GAME CANDIDATES / SELECTION ----------------

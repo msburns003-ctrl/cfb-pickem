@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Plus, Trash2, Trophy } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, Trophy, DollarSign } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Game, Week } from "@shared/schema";
 
@@ -20,6 +20,7 @@ interface AdminWeekResponse {
   games: Game[];
   pickProgress: { userId: number; name: string; picksSubmitted: number; hasUpsetPick: boolean }[];
   ATS_THRESHOLD: number;
+  weeklyWinners: { userId: number; name: string; points: number }[];
 }
 
 const emptyGameForm = { awayTeam: "", homeTeam: "", favoriteTeam: "", spread: "", kickoff: "", broadcast: "" };
@@ -32,6 +33,7 @@ export default function AdminWeekDetailPage() {
   const [addOpen, setAddOpen] = useState(false);
   const [gameForm, setGameForm] = useState(emptyGameForm);
   const [scoreDrafts, setScoreDrafts] = useState<Record<number, { away: string; home: string }>>({});
+  const [payoutDraft, setPayoutDraft] = useState<string | null>(null);
 
   const { data, isLoading } = useQuery<AdminWeekResponse>({ queryKey: [`/api/admin/weeks/${weekId}`] });
 
@@ -97,7 +99,8 @@ export default function AdminWeekDetailPage() {
 
   if (isLoading || !data) return <p className="text-muted-foreground">Loading...</p>;
 
-  const { week, games, pickProgress } = data;
+  const { week, games, pickProgress, weeklyWinners } = data;
+  const payoutAmountValue = payoutDraft ?? (week.payoutAmount != null ? String(week.payoutAmount) : "");
   const selectedGames = games.filter((g) => g.isSelected);
   const candidateGames = games.filter((g) => !g.isSelected);
   const allSelectedFinal = selectedGames.length > 0 && selectedGames.every((g) => g.status === "final");
@@ -166,6 +169,50 @@ export default function AdminWeekDetailPage() {
           </div>
         </CardContent>
       </Card>
+
+      {weeklyWinners.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <DollarSign className="h-4 w-4 text-accent" /> Weekly Payout
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-3">
+            <p className="text-sm">
+              {weeklyWinners.length === 1 ? "Winner: " : "Winners (tied): "}
+              <span className="font-medium">{weeklyWinners.map((w) => w.name).join(", ")}</span>
+              <span className="text-muted-foreground"> · {weeklyWinners[0].points} pts</span>
+            </p>
+            <div className="flex flex-wrap items-end gap-3">
+              <div className="flex flex-col gap-1.5">
+                <Label>Amount ($)</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  min={0}
+                  className="w-32"
+                  value={payoutAmountValue}
+                  onChange={(e) => setPayoutDraft(e.target.value)}
+                  onBlur={(e) => {
+                    const amount = e.target.value === "" ? null : Number(e.target.value);
+                    updateWeekMutation.mutate({ payoutAmount: amount });
+                    setPayoutDraft(null);
+                  }}
+                  data-testid="input-payout-amount"
+                />
+              </div>
+              <div className="flex items-center gap-1.5">
+                <Switch
+                  checked={week.payoutPaid}
+                  onCheckedChange={(checked) => updateWeekMutation.mutate({ payoutPaid: checked })}
+                  data-testid="switch-payout-paid"
+                />
+                <span className="text-sm text-muted-foreground">{week.payoutPaid ? "Paid" : "Unpaid"}</span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">

@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { Trophy } from "lucide-react";
+import { Trophy, DollarSign, CheckCircle2, Circle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth";
 import type { Week } from "@shared/schema";
@@ -97,6 +97,53 @@ export default function StandingsPage() {
           </tbody>
         </table>
       </div>
+
+      {data.weeks.length > 0 && (
+      <div className="flex flex-col gap-2">
+        <h2 className="font-display text-lg font-semibold tracking-tight flex items-center gap-2">
+          <DollarSign className="h-4 w-4 text-accent" /> Weekly Winners
+        </h2>
+        <div className="overflow-x-auto rounded-lg border border-card-border">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-card-border bg-muted/50 text-left text-xs uppercase tracking-wide text-muted-foreground">
+                <th className="px-3 py-2 font-medium">Week</th>
+                <th className="px-3 py-2 font-medium">Winner</th>
+                <th className="px-3 py-2 text-center font-medium">Points</th>
+                <th className="px-3 py-2 text-right font-medium">Payout</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.weeks.map((w) => {
+                const maxPoints = Math.max(...data.rows.map((r) => r.weeklyPoints[w.id] ?? 0));
+                const winners = data.rows.filter((r) => (r.weeklyPoints[w.id] ?? 0) === maxPoints);
+                return (
+                  <tr key={w.id} className="border-b border-card-border last:border-0" data-testid={`row-weekly-winner-${w.id}`}>
+                    <td className="px-3 py-2 whitespace-nowrap">{w.label}</td>
+                    <td className="px-3 py-2 font-medium">{winners.map((r) => r.name).join(", ")}</td>
+                    <td className="px-3 py-2 text-center text-muted-foreground">{maxPoints}</td>
+                    <td className="px-3 py-2 text-right">
+                      {w.payoutAmount != null ? (
+                        <span className="inline-flex items-center gap-1 justify-end">
+                          ${w.payoutAmount.toFixed(2)}
+                          {w.payoutPaid ? (
+                            <CheckCircle2 className="h-3.5 w-3.5 text-green-600 dark:text-green-400" aria-label="Paid" />
+                          ) : (
+                            <Circle className="h-3.5 w-3.5 text-muted-foreground" aria-label="Unpaid" />
+                          )}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      )}
     </div>
   );
 }

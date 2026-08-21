@@ -12,6 +12,7 @@ import NotFound from "@/pages/not-found";
 import LoginPage from "@/pages/login";
 import DashboardPage from "@/pages/dashboard";
 import StandingsPage from "@/pages/standings";
+import GridPage from "@/pages/grid";
 import ProfilePage from "@/pages/profile";
 import AdminWeeksPage from "@/pages/admin/weeks";
 import AdminMembersPage from "@/pages/admin/members";
@@ -52,6 +53,11 @@ function AppRouter() {
       <Route path="/standings">
         <Protected>
           <StandingsPage />
+        </Protected>
+      </Route>
+      <Route path="/grid">
+        <Protected>
+          <GridPage />
         </Protected>
       </Route>
       <Route path="/profile">
