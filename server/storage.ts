@@ -1,28 +1,56 @@
-import {
-  users,
-  weeks,
-  games,
-  picks,
-  upsetPicks,
-  type User,
-  type InsertUser,
-  type Week,
-  type InsertWeek,
-  type Game,
-  type InsertGame,
-  type Pick,
-  type InsertPick,
-  type UpsetPick,
-  type InsertUpsetPick,
+import type {
+  User,
+  InsertUser,
+  Week,
+  InsertWeek,
+  Game,
+  InsertGame,
+  Pick,
+  InsertPick,
+  UpsetPick,
+  InsertUpsetPick,
 } from "@shared/schema";
-import { drizzle } from "drizzle-orm/better-sqlite3";
-import Database from "better-sqlite3";
-import { eq, and, desc, asc } from "drizzle-orm";
+import supabase from "./supabase";
 
-const sqlite = new Database("data.db");
-sqlite.pragma("journal_mode = WAL");
+// ---------- camelCase <-> snake_case mapping helpers ----------
 
-export const db = drizzle(sqlite, { schema: { users, weeks, games, picks, upsetPicks } });
+function toSnakeCase(str: string): string {
+  return str.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`);
+}
+
+function toCamelCase(str: string): string {
+  return str.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
+}
+
+function rowToCamel<T>(row: Record<string, any> | null): T | undefined {
+  if (!row) return undefined;
+  const result: Record<string, any> = {};
+  for (const key of Object.keys(row)) {
+    result[toCamelCase(key)] = row[key];
+  }
+  return result as T;
+}
+
+function rowsToCamel<T>(rows: Record<string, any>[] | null): T[] {
+  if (!rows) return [];
+  return rows.map((r) => rowToCamel<T>(r)!);
+}
+
+function objectToSnake(obj: Record<string, any>): Record<string, any> {
+  const result: Record<string, any> = {};
+  for (const key of Object.keys(obj)) {
+    if (obj[key] !== undefined) {
+      result[toSnakeCase(key)] = obj[key];
+    }
+  }
+  return result;
+}
+
+function assertNoError(error: any, context: string) {
+  if (error) {
+    throw new Error(`Supabase error in ${context}: ${error.message}`);
+  }
+}
 
 export interface IStorage {
   // users
@@ -65,139 +93,227 @@ export interface IStorage {
 export class DatabaseStorage implements IStorage {
   // ---------- users ----------
   async getUser(id: number): Promise<User | undefined> {
-    return db.select().from(users).where(eq(users.id, id)).get();
+    const { data, error } = await supabase.from("users").select("*").eq("id", id).maybeSingle();
+    assertNoError(error, "getUser");
+    return rowToCamel<User>(data);
   }
   async getUserByEmail(email: string): Promise<User | undefined> {
-    return db
-      .select()
-      .from(users)
-      .where(eq(users.email, email.toLowerCase().trim()))
-      .get();
+    const { data, error } = await supabase
+      .from("users")
+      .select("*")
+      .eq("email", email.toLowerCase().trim())
+      .maybeSingle();
+    assertNoError(error, "getUserByEmail");
+    return rowToCamel<User>(data);
   }
   async getUserByToken(token: string): Promise<User | undefined> {
-    return db.select().from(users).where(eq(users.authToken, token)).get();
+    const { data, error } = await supabase
+      .from("users")
+      .select("*")
+      .eq("auth_token", token)
+      .maybeSingle();
+    assertNoError(error, "getUserByToken");
+    return rowToCamel<User>(data);
   }
   async createUser(user: InsertUser): Promise<User> {
-    return db
-      .insert(users)
-      .values({ ...user, email: user.email.toLowerCase().trim() })
-      .returning()
-      .get();
+    const payload = objectToSnake({ ...user, email: user.email.toLowerCase().trim() });
+    const { data, error } = await supabase.from("users").insert(payload).select().single();
+    assertNoError(error, "createUser");
+    return rowToCamel<User>(data)!;
   }
   async listUsers(): Promise<User[]> {
-    return db.select().from(users).orderBy(asc(users.name)).all();
+    const { data, error } = await supabase.from("users").select("*").order("name", { ascending: true });
+    assertNoError(error, "listUsers");
+    return rowsToCamel<User>(data);
   }
   async updateUser(id: number, fields: Partial<User>): Promise<User | undefined> {
-    return db.update(users).set(fields).where(eq(users.id, id)).returning().get();
+    const payload = objectToSnake(fields);
+    const { data, error } = await supabase.from("users").update(payload).eq("id", id).select().maybeSingle();
+    assertNoError(error, "updateUser");
+    return rowToCamel<User>(data);
   }
   async deleteUser(id: number): Promise<void> {
-    db.delete(users).where(eq(users.id, id)).run();
+    const { error } = await supabase.from("users").delete().eq("id", id);
+    assertNoError(error, "deleteUser");
   }
 
   // ---------- weeks ----------
   async listWeeks(): Promise<Week[]> {
-    return db.select().from(weeks).orderBy(desc(weeks.seasonYear), desc(weeks.weekNumber)).all();
+    const { data, error } = await supabase
+      .from("weeks")
+      .select("*")
+      .order("season_year", { ascending: false })
+      .order("week_number", { ascending: false });
+    assertNoError(error, "listWeeks");
+    return rowsToCamel<Week>(data);
   }
   async getWeek(id: number): Promise<Week | undefined> {
-    return db.select().from(weeks).where(eq(weeks.id, id)).get();
+    const { data, error } = await supabase.from("weeks").select("*").eq("id", id).maybeSingle();
+    assertNoError(error, "getWeek");
+    return rowToCamel<Week>(data);
   }
   async createWeek(week: InsertWeek): Promise<Week> {
-    return db.insert(weeks).values(week).returning().get();
+    const payload = objectToSnake(week);
+    const { data, error } = await supabase.from("weeks").insert(payload).select().single();
+    assertNoError(error, "createWeek");
+    return rowToCamel<Week>(data)!;
   }
   async updateWeek(id: number, fields: Partial<Week>): Promise<Week | undefined> {
-    return db.update(weeks).set(fields).where(eq(weeks.id, id)).returning().get();
+    const payload = objectToSnake(fields);
+    const { data, error } = await supabase.from("weeks").update(payload).eq("id", id).select().maybeSingle();
+    assertNoError(error, "updateWeek");
+    return rowToCamel<Week>(data);
   }
 
   // ---------- games ----------
   async listGamesByWeek(weekId: number): Promise<Game[]> {
-    return db.select().from(games).where(eq(games.weekId, weekId)).orderBy(asc(games.sortOrder), asc(games.kickoff)).all();
+    const { data, error } = await supabase
+      .from("games")
+      .select("*")
+      .eq("week_id", weekId)
+      .order("sort_order", { ascending: true })
+      .order("kickoff", { ascending: true });
+    assertNoError(error, "listGamesByWeek");
+    return rowsToCamel<Game>(data);
   }
   async getGame(id: number): Promise<Game | undefined> {
-    return db.select().from(games).where(eq(games.id, id)).get();
+    const { data, error } = await supabase.from("games").select("*").eq("id", id).maybeSingle();
+    assertNoError(error, "getGame");
+    return rowToCamel<Game>(data);
   }
   async createGame(game: InsertGame): Promise<Game> {
-    return db.insert(games).values(game).returning().get();
+    const payload = objectToSnake(game);
+    const { data, error } = await supabase.from("games").insert(payload).select().single();
+    assertNoError(error, "createGame");
+    return rowToCamel<Game>(data)!;
   }
   async createGames(gameList: InsertGame[]): Promise<Game[]> {
     if (gameList.length === 0) return [];
-    return db.insert(games).values(gameList).returning().all();
+    const payload = gameList.map((g) => objectToSnake(g));
+    const { data, error } = await supabase.from("games").insert(payload).select();
+    assertNoError(error, "createGames");
+    return rowsToCamel<Game>(data);
   }
   async updateGame(id: number, fields: Partial<Game>): Promise<Game | undefined> {
-    return db.update(games).set(fields).where(eq(games.id, id)).returning().get();
+    const payload = objectToSnake(fields);
+    const { data, error } = await supabase.from("games").update(payload).eq("id", id).select().maybeSingle();
+    assertNoError(error, "updateGame");
+    return rowToCamel<Game>(data);
   }
   async deleteGame(id: number): Promise<void> {
-    db.delete(games).where(eq(games.id, id)).run();
+    const { error } = await supabase.from("games").delete().eq("id", id);
+    assertNoError(error, "deleteGame");
   }
 
   // ---------- picks ----------
   async listPicksByWeek(weekId: number): Promise<Pick[]> {
-    const rows = await db
-      .select({ pick: picks })
-      .from(picks)
-      .innerJoin(games, eq(picks.gameId, games.id))
-      .where(eq(games.weekId, weekId))
-      .all();
-    return rows.map((r) => r.pick);
+    const gameIds = await this.gameIdsForWeek(weekId);
+    if (gameIds.length === 0) return [];
+    const { data, error } = await supabase.from("picks").select("*").in("game_id", gameIds);
+    assertNoError(error, "listPicksByWeek");
+    return rowsToCamel<Pick>(data);
   }
   async listPicksByUser(userId: number, weekId: number): Promise<Pick[]> {
-    const rows = await db
-      .select({ pick: picks })
-      .from(picks)
-      .innerJoin(games, eq(picks.gameId, games.id))
-      .where(and(eq(picks.userId, userId), eq(games.weekId, weekId)))
-      .all();
-    return rows.map((r) => r.pick);
+    const gameIds = await this.gameIdsForWeek(weekId);
+    if (gameIds.length === 0) return [];
+    const { data, error } = await supabase
+      .from("picks")
+      .select("*")
+      .eq("user_id", userId)
+      .in("game_id", gameIds);
+    assertNoError(error, "listPicksByUser");
+    return rowsToCamel<Pick>(data);
   }
   async getPick(gameId: number, userId: number): Promise<Pick | undefined> {
-    return db.select().from(picks).where(and(eq(picks.gameId, gameId), eq(picks.userId, userId))).get();
+    const { data, error } = await supabase
+      .from("picks")
+      .select("*")
+      .eq("game_id", gameId)
+      .eq("user_id", userId)
+      .maybeSingle();
+    assertNoError(error, "getPick");
+    return rowToCamel<Pick>(data);
   }
   async upsertPick(pick: InsertPick): Promise<Pick> {
     const existing = await this.getPick(pick.gameId, pick.userId);
     if (existing) {
-      return db
-        .update(picks)
-        .set({ selectedTeam: pick.selectedTeam, submittedAt: pick.submittedAt })
-        .where(eq(picks.id, existing.id))
-        .returning()
-        .get();
+      const { data, error } = await supabase
+        .from("picks")
+        .update({ selected_team: pick.selectedTeam, submitted_at: pick.submittedAt })
+        .eq("id", existing.id)
+        .select()
+        .single();
+      assertNoError(error, "upsertPick(update)");
+      return rowToCamel<Pick>(data)!;
     }
-    return db.insert(picks).values(pick).returning().get();
+    const payload = objectToSnake(pick);
+    const { data, error } = await supabase.from("picks").insert(payload).select().single();
+    assertNoError(error, "upsertPick(insert)");
+    return rowToCamel<Pick>(data)!;
   }
   async updatePick(id: number, fields: Partial<Pick>): Promise<Pick | undefined> {
-    return db.update(picks).set(fields).where(eq(picks.id, id)).returning().get();
+    const payload = objectToSnake(fields);
+    const { data, error } = await supabase.from("picks").update(payload).eq("id", id).select().maybeSingle();
+    assertNoError(error, "updatePick");
+    return rowToCamel<Pick>(data);
   }
 
   // ---------- upset picks ----------
   async getUpsetPick(weekId: number, userId: number): Promise<UpsetPick | undefined> {
-    return db
-      .select()
-      .from(upsetPicks)
-      .where(and(eq(upsetPicks.weekId, weekId), eq(upsetPicks.userId, userId)))
-      .get();
+    const { data, error } = await supabase
+      .from("upset_picks")
+      .select("*")
+      .eq("week_id", weekId)
+      .eq("user_id", userId)
+      .maybeSingle();
+    assertNoError(error, "getUpsetPick");
+    return rowToCamel<UpsetPick>(data);
   }
   async listUpsetPicksByWeek(weekId: number): Promise<UpsetPick[]> {
-    return db.select().from(upsetPicks).where(eq(upsetPicks.weekId, weekId)).all();
+    const { data, error } = await supabase.from("upset_picks").select("*").eq("week_id", weekId);
+    assertNoError(error, "listUpsetPicksByWeek");
+    return rowsToCamel<UpsetPick>(data);
   }
   async upsertUpsetPick(pick: InsertUpsetPick): Promise<UpsetPick> {
     const existing = await this.getUpsetPick(pick.weekId, pick.userId);
     if (existing) {
-      return db
-        .update(upsetPicks)
-        .set({
-          gameId: pick.gameId,
-          underdogTeam: pick.underdogTeam,
-          favoriteTeam: pick.favoriteTeam,
+      const { data, error } = await supabase
+        .from("upset_picks")
+        .update({
+          game_id: pick.gameId,
+          underdog_team: pick.underdogTeam,
+          favorite_team: pick.favoriteTeam,
           spread: pick.spread,
-          submittedAt: pick.submittedAt,
+          submitted_at: pick.submittedAt,
         })
-        .where(eq(upsetPicks.id, existing.id))
-        .returning()
-        .get();
+        .eq("id", existing.id)
+        .select()
+        .single();
+      assertNoError(error, "upsertUpsetPick(update)");
+      return rowToCamel<UpsetPick>(data)!;
     }
-    return db.insert(upsetPicks).values(pick).returning().get();
+    const payload = objectToSnake(pick);
+    const { data, error } = await supabase.from("upset_picks").insert(payload).select().single();
+    assertNoError(error, "upsertUpsetPick(insert)");
+    return rowToCamel<UpsetPick>(data)!;
   }
   async updateUpsetPick(id: number, fields: Partial<UpsetPick>): Promise<UpsetPick | undefined> {
-    return db.update(upsetPicks).set(fields).where(eq(upsetPicks.id, id)).returning().get();
+    const payload = objectToSnake(fields);
+    const { data, error } = await supabase
+      .from("upset_picks")
+      .update(payload)
+      .eq("id", id)
+      .select()
+      .maybeSingle();
+    assertNoError(error, "updateUpsetPick");
+    return rowToCamel<UpsetPick>(data);
+  }
+
+  // ---------- helpers ----------
+  private async gameIdsForWeek(weekId: number): Promise<number[]> {
+    const { data, error } = await supabase.from("games").select("id").eq("week_id", weekId);
+    assertNoError(error, "gameIdsForWeek");
+    return (data ?? []).map((r: { id: number }) => r.id);
   }
 }
 

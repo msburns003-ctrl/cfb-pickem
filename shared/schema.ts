@@ -1,140 +1,145 @@
-import { sqliteTable, text, integer, real, unique } from "drizzle-orm/sqlite-core";
-import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
 // ---------- Users ----------
-export const users = sqliteTable("users", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
-  name: text("name").notNull(),
-  email: text("email").notNull().unique(),
-  passwordHash: text("password_hash").notNull(),
-  isAdmin: integer("is_admin", { mode: "boolean" }).notNull().default(false),
-  authToken: text("auth_token"),
-  mustChangePassword: integer("must_change_password", { mode: "boolean" }).notNull().default(true),
-});
+export interface User {
+  id: number;
+  name: string;
+  email: string;
+  passwordHash: string;
+  isAdmin: boolean;
+  authToken: string | null;
+  mustChangePassword: boolean;
+}
 
-export const insertUserSchema = createInsertSchema(users).pick({
-  name: true,
-  email: true,
-  passwordHash: true,
-  isAdmin: true,
+export const insertUserSchema = z.object({
+  name: z.string().min(1),
+  email: z.string().email(),
+  passwordHash: z.string().min(1),
+  isAdmin: z.boolean().optional(),
 });
 export type InsertUser = z.infer<typeof insertUserSchema>;
-export type User = typeof users.$inferSelect;
 export type PublicUser = Omit<User, "passwordHash" | "authToken">;
 
 // ---------- Weeks ----------
-export const weeks = sqliteTable("weeks", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
-  seasonYear: integer("season_year").notNull(),
-  weekNumber: integer("week_number").notNull(),
-  label: text("label").notNull(),
-  pickDeadline: text("pick_deadline").notNull(), // ISO datetime string
-  moneyGameCount: integer("money_game_count").notNull().default(2),
-  status: text("status", { enum: ["setup", "open", "locked", "graded"] })
-    .notNull()
-    .default("setup"),
-  payoutAmount: real("payout_amount"),
-  payoutPaid: integer("payout_paid", { mode: "boolean" }).notNull().default(false),
-});
+export type WeekStatus = "setup" | "open" | "locked" | "graded";
 
-export const insertWeekSchema = createInsertSchema(weeks).omit({ id: true });
-export type InsertWeek = typeof weeks.$inferInsert;
-export type Week = typeof weeks.$inferSelect;
+export interface Week {
+  id: number;
+  seasonYear: number;
+  weekNumber: number;
+  label: string;
+  pickDeadline: string; // ISO datetime string
+  moneyGameCount: number;
+  status: WeekStatus;
+  payoutAmount: number | null;
+  payoutPaid: boolean;
+}
+
+export const insertWeekSchema = z.object({
+  seasonYear: z.number().int(),
+  weekNumber: z.number().int(),
+  label: z.string().min(1),
+  pickDeadline: z.string().min(1),
+  moneyGameCount: z.number().int().optional(),
+  status: z.enum(["setup", "open", "locked", "graded"]).optional(),
+  payoutAmount: z.number().nullable().optional(),
+  payoutPaid: z.boolean().optional(),
+});
+export type InsertWeek = z.infer<typeof insertWeekSchema>;
 
 // ---------- Games ----------
-export const games = sqliteTable("games", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
-  weekId: integer("week_id")
-    .notNull()
-    .references(() => weeks.id),
-  sourceFixtureId: text("source_fixture_id"),
-  awayTeam: text("away_team").notNull(),
-  homeTeam: text("home_team").notNull(),
-  awayRank: integer("away_rank"),
-  homeRank: integer("home_rank"),
-  favoriteTeam: text("favorite_team").notNull(),
-  spread: real("spread").notNull(), // absolute points favorite is favored by
-  kickoff: text("kickoff").notNull(), // ISO datetime string
-  broadcast: text("broadcast"),
-  pickType: text("pick_type", { enum: ["SU", "ATS"] }).notNull(),
-  isSelected: integer("is_selected", { mode: "boolean" }).notNull().default(false),
-  sortOrder: integer("sort_order").notNull().default(0),
-  status: text("status", { enum: ["scheduled", "final"] })
-    .notNull()
-    .default("scheduled"),
-  awayScore: integer("away_score"),
-  homeScore: integer("home_score"),
-  winner: text("winner"),
-  atsResult: text("ats_result", { enum: ["favorite", "underdog", "push"] }),
-  isMoneyGame: integer("is_money_game", { mode: "boolean" }).notNull().default(false),
-});
+export type PickType = "SU" | "ATS";
+export type GameStatus = "scheduled" | "final";
+export type AtsResult = "favorite" | "underdog" | "push";
 
-export const insertGameSchema = createInsertSchema(games).omit({ id: true });
-export type InsertGame = typeof games.$inferInsert;
-export type Game = typeof games.$inferSelect;
+export interface Game {
+  id: number;
+  weekId: number;
+  sourceFixtureId: string | null;
+  awayTeam: string;
+  homeTeam: string;
+  awayRank: number | null;
+  homeRank: number | null;
+  favoriteTeam: string;
+  spread: number; // absolute points favorite is favored by
+  kickoff: string; // ISO datetime string
+  broadcast: string | null;
+  pickType: PickType;
+  isSelected: boolean;
+  sortOrder: number;
+  status: GameStatus;
+  awayScore: number | null;
+  homeScore: number | null;
+  winner: string | null;
+  atsResult: AtsResult | null;
+  isMoneyGame: boolean;
+}
+
+export const insertGameSchema = z.object({
+  weekId: z.number().int(),
+  sourceFixtureId: z.string().nullable().optional(),
+  awayTeam: z.string().min(1),
+  homeTeam: z.string().min(1),
+  awayRank: z.number().int().nullable().optional(),
+  homeRank: z.number().int().nullable().optional(),
+  favoriteTeam: z.string().min(1),
+  spread: z.number(),
+  kickoff: z.string().min(1),
+  broadcast: z.string().nullable().optional(),
+  pickType: z.enum(["SU", "ATS"]),
+  isSelected: z.boolean().optional(),
+  sortOrder: z.number().int().optional(),
+  status: z.enum(["scheduled", "final"]).optional(),
+  awayScore: z.number().int().nullable().optional(),
+  homeScore: z.number().int().nullable().optional(),
+  winner: z.string().nullable().optional(),
+  atsResult: z.enum(["favorite", "underdog", "push"]).nullable().optional(),
+  isMoneyGame: z.boolean().optional(),
+});
+export type InsertGame = z.infer<typeof insertGameSchema>;
 
 // ---------- Picks ----------
-export const picks = sqliteTable(
-  "picks",
-  {
-    id: integer("id").primaryKey({ autoIncrement: true }),
-    gameId: integer("game_id")
-      .notNull()
-      .references(() => games.id),
-    userId: integer("user_id")
-      .notNull()
-      .references(() => users.id),
-    selectedTeam: text("selected_team").notNull(),
-    isCorrect: integer("is_correct", { mode: "boolean" }),
-    pointsEarned: integer("points_earned"),
-    submittedAt: text("submitted_at").notNull(),
-  },
-  (t) => ({
-    uniqGamePerUser: unique().on(t.gameId, t.userId),
-  }),
-);
+export interface Pick {
+  id: number;
+  gameId: number;
+  userId: number;
+  selectedTeam: string;
+  isCorrect: boolean | null;
+  pointsEarned: number | null;
+  submittedAt: string;
+}
 
-export const insertPickSchema = createInsertSchema(picks).omit({
-  id: true,
-  isCorrect: true,
-  pointsEarned: true,
+export const insertPickSchema = z.object({
+  gameId: z.number().int(),
+  userId: z.number().int(),
+  selectedTeam: z.string().min(1),
+  submittedAt: z.string().min(1),
 });
-export type InsertPick = typeof picks.$inferInsert;
-export type Pick = typeof picks.$inferSelect;
+export type InsertPick = z.infer<typeof insertPickSchema>;
 
 // ---------- Upset Picks (bonus weekly pick) ----------
-export const upsetPicks = sqliteTable(
-  "upset_picks",
-  {
-    id: integer("id").primaryKey({ autoIncrement: true }),
-    weekId: integer("week_id")
-      .notNull()
-      .references(() => weeks.id),
-    userId: integer("user_id")
-      .notNull()
-      .references(() => users.id),
-    gameId: integer("game_id")
-      .notNull()
-      .references(() => games.id),
-    underdogTeam: text("underdog_team").notNull(),
-    favoriteTeam: text("favorite_team").notNull(),
-    spread: real("spread").notNull(),
-    result: text("result", { enum: ["pending", "win", "loss", "push"] })
-      .notNull()
-      .default("pending"),
-    pointsEarned: integer("points_earned").notNull().default(0),
-    submittedAt: text("submitted_at").notNull(),
-  },
-  (t) => ({
-    uniqWeekPerUser: unique().on(t.weekId, t.userId),
-  }),
-);
+export type UpsetResult = "pending" | "win" | "loss" | "push";
 
-export const insertUpsetPickSchema = createInsertSchema(upsetPicks).omit({
-  id: true,
-  result: true,
-  pointsEarned: true,
+export interface UpsetPick {
+  id: number;
+  weekId: number;
+  userId: number;
+  gameId: number;
+  underdogTeam: string;
+  favoriteTeam: string;
+  spread: number;
+  result: UpsetResult;
+  pointsEarned: number;
+  submittedAt: string;
+}
+
+export const insertUpsetPickSchema = z.object({
+  weekId: z.number().int(),
+  userId: z.number().int(),
+  gameId: z.number().int(),
+  underdogTeam: z.string().min(1),
+  favoriteTeam: z.string().min(1),
+  spread: z.number(),
+  submittedAt: z.string().min(1),
 });
-export type InsertUpsetPick = typeof upsetPicks.$inferInsert;
-export type UpsetPick = typeof upsetPicks.$inferSelect;
+export type InsertUpsetPick = z.infer<typeof insertUpsetPickSchema>;
