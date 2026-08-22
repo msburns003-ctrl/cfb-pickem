@@ -14,6 +14,7 @@ import {
   gradeCristoBallEntry,
 } from "./scoring";
 import { insertWeekSchema, type InsertWeek, insertCristoBallEntrySchema, insertCristoBallResultsSchema } from "@shared/schema";
+import { checkGamesForWeek } from "./scores";
 import { z } from "zod";
 
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
@@ -494,6 +495,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       res.json({ ok: true });
     } catch (err) {
       res.status(400).json({ message: err instanceof Error ? err.message : "Failed to grade week" });
+    }
+  });
+
+  app.post("/api/admin/weeks/:id/check-games", requireAdmin, async (req, res) => {
+    try {
+      const result = await checkGamesForWeek(Number(req.params.id));
+      res.json(result);
+    } catch (err) {
+      res.status(500).json({ message: err instanceof Error ? err.message : "Failed to check games" });
     }
   });
 

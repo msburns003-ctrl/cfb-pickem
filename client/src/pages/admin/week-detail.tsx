@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Plus, Trash2, Trophy, DollarSign } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, Trophy, DollarSign, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Game, Week } from "@shared/schema";
 
@@ -95,6 +95,25 @@ export default function AdminWeekDetailPage() {
       toast({ title: "Week graded", description: "Standings have been updated." });
     },
     onError: (err) => toast({ title: "Couldn't grade week", description: err instanceof Error ? err.message : undefined, variant: "destructive" }),
+  });
+
+  const checkGamesMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/admin/weeks/${weekId}/check-games`);
+      return (await res.json()) as { updated: Game[]; stillScheduled: Game[]; unmatched: Game[] };
+    },
+    onSuccess: (result) => {
+      invalidate();
+      const parts: string[] = [];
+      if (result.updated.length) parts.push(`${result.updated.length} game${result.updated.length === 1 ? "" : "s"} marked final`);
+      if (result.stillScheduled.length) parts.push(`${result.stillScheduled.length} still in progress`);
+      if (result.unmatched.length) parts.push(`${result.unmatched.length} not found yet — enter manually if needed`);
+      toast({
+        title: parts.length ? "Games checked" : "Nothing to update",
+        description: parts.length ? parts.join(" · ") : "No games have finished yet.",
+      });
+    },
+    onError: (err) => toast({ title: "Couldn't check games", description: err instanceof Error ? err.message : undefined, variant: "destructive" }),
   });
 
   if (isLoading || !data) return <p className="text-muted-foreground">Loading...</p>;
@@ -217,6 +236,17 @@ export default function AdminWeekDetailPage() {
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="text-base">Games ({selectedGames.length} selected · {candidateGames.length} candidates)</CardTitle>
+          <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => checkGamesMutation.mutate()}
+            disabled={checkGamesMutation.isPending || games.every((g) => g.status === "final")}
+            data-testid="button-check-games"
+          >
+            <RefreshCw className={cn("h-4 w-4", checkGamesMutation.isPending && "animate-spin")} />
+            {checkGamesMutation.isPending ? "Checking..." : "Check Games"}
+          </Button>
           <Dialog open={addOpen} onOpenChange={setAddOpen}>
             <DialogTrigger asChild>
               <Button size="sm" variant="outline" data-testid="button-add-game">
@@ -264,6 +294,7 @@ export default function AdminWeekDetailPage() {
               </DialogFooter>
             </DialogContent>
           </Dialog>
+          </div>
         </CardHeader>
         <CardContent className="flex flex-col gap-2">
           {games.length === 0 && <p className="text-sm text-muted-foreground">No games yet. Add candidates to build this week's slate.</p>}
