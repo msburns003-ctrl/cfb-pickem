@@ -148,6 +148,7 @@ export interface StandingsRow {
   cristoBallPoints: number | null; // null = not graded yet
   totalPoints: number;
   rank: number;
+  previousRank: number | null; // rank as of the prior graded week; null if not enough graded weeks yet
 }
 
 /**
@@ -230,13 +231,19 @@ export function gradeCristoBallEntry(
 }
 
 /**
- * Computes season standings across all graded weeks, plus Cristo-Ball points
- * once Cristo-Ball has been graded. Ties share the same rank (no tiebreaker),
- * matching the league's historical convention.
+ * Computes season standings. By default, across all graded weeks, plus
+ * Cristo-Ball points once Cristo-Ball has been graded. Ties share the same
+ * rank (no tiebreaker), matching the league's historical convention.
+ *
+ * When `weekIdsFilter` is provided, only picks/upset picks from those weeks
+ * are accumulated (used to reconstruct "standings as of a prior week" for
+ * rank-change comparisons); Cristo-Ball points are always included once
+ * graded, since Cristo-Ball is a single season-long lump sum rather than a
+ * per-week component.
  */
-export async function computeStandings(): Promise<StandingsRow[]> {
+export async function computeStandings(weekIdsFilter?: number[]): Promise<StandingsRow[]> {
   const allUsers = (await storage.listUsers()).filter((u) => !u.isAdmin || true);
-  const allWeeks = await storage.listWeeks();
+  const allWeeks = (await storage.listWeeks()).filter((w) => !weekIdsFilter || weekIdsFilter.includes(w.id));
   const seasonYear = await getCurrentSeasonYear();
   const cristoBallResults = await storage.getCristoBallResults(seasonYear);
   const cristoBallGraded = !!cristoBallResults?.gradedAt;
@@ -277,6 +284,7 @@ export async function computeStandings(): Promise<StandingsRow[]> {
     cristoBallPoints: v.cristoBallPoints,
     totalPoints: v.total,
     rank: 0,
+    previousRank: null,
   }));
 
   rows.sort((a, b) => b.totalPoints - a.totalPoints);

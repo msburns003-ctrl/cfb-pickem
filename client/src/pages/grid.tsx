@@ -21,10 +21,19 @@ interface GridRow {
   } | null;
 }
 
+interface ConsensusEntry {
+  awayCount: number;
+  homeCount: number;
+  awayPct: number;
+  homePct: number;
+  totalPicks: number;
+}
+
 interface GridResponse {
   week: Week;
   games: Game[];
   grid: GridRow[];
+  consensus: Record<number, ConsensusEntry>;
 }
 
 function useWeeksList() {
@@ -129,6 +138,45 @@ export default function GridPage() {
                     </th>
                   </tr>
                 </thead>
+                <tfoot>
+                  <tr className="border-b-0 border-t border-card-border bg-muted/30 text-xs" data-testid="row-consensus">
+                    <td className="sticky left-0 z-10 bg-muted/30 px-3 py-2 font-medium text-muted-foreground whitespace-nowrap">
+                      Consensus
+                    </td>
+                    {data.games.map((g) => {
+                      const c = data.consensus[g.id];
+                      if (!c || c.totalPicks === 0) {
+                        return (
+                          <td key={g.id} className="px-3 py-2 text-center text-muted-foreground/50">
+                            —
+                          </td>
+                        );
+                      }
+                      const awayMajority = c.awayPct >= c.homePct;
+                      return (
+                        <td key={g.id} className="px-3 py-2 text-center whitespace-nowrap">
+                          <div
+                            className="flex items-center justify-center gap-1"
+                            title={`${g.awayTeam}: ${c.awayCount} pick${c.awayCount === 1 ? "" : "s"} \u00b7 ${g.homeTeam}: ${c.homeCount} pick${c.homeCount === 1 ? "" : "s"}`}
+                          >
+                            <span className={cn(awayMajority ? "font-semibold text-foreground" : "text-muted-foreground")}>
+                              {c.awayPct}%
+                            </span>
+                            <span className="text-muted-foreground/40">/</span>
+                            <span className={cn(!awayMajority ? "font-semibold text-foreground" : "text-muted-foreground")}>
+                              {c.homePct}%
+                            </span>
+                          </div>
+                          <div className="mt-1 flex h-1 w-full overflow-hidden rounded-full bg-muted">
+                            <div className="h-full bg-accent/70" style={{ width: `${c.awayPct}%` }} />
+                            <div className="h-full bg-secondary" style={{ width: `${c.homePct}%` }} />
+                          </div>
+                        </td>
+                      );
+                    })}
+                    <td className="px-3 py-2" />
+                  </tr>
+                </tfoot>
                 <tbody>
                   {data.grid.map((row) => (
                     <tr

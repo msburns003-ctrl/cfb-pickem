@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { Trophy, DollarSign, CheckCircle2, Circle } from "lucide-react";
+import { Trophy, DollarSign, CheckCircle2, Circle, ArrowUp, ArrowDown, Minus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth";
 import type { Week } from "@shared/schema";
@@ -13,6 +13,41 @@ interface StandingsRow {
   cristoBallPoints: number | null;
   totalPoints: number;
   rank: number;
+  previousRank: number | null;
+}
+
+function RankChangeIndicator({ rank, previousRank }: { rank: number; previousRank: number | null }) {
+  if (previousRank == null) {
+    return <span className="text-xs text-muted-foreground/50" title="Not enough graded weeks yet">—</span>;
+  }
+  const delta = previousRank - rank; // positive = moved up (lower rank number is better)
+  if (delta === 0) {
+    return (
+      <span className="inline-flex items-center text-muted-foreground" title="No change since last week">
+        <Minus className="h-3.5 w-3.5" />
+      </span>
+    );
+  }
+  if (delta > 0) {
+    return (
+      <span
+        className="inline-flex items-center gap-0.5 text-green-600 dark:text-green-400"
+        title={`Up ${delta} spot${delta === 1 ? "" : "s"} since last week`}
+      >
+        <ArrowUp className="h-3.5 w-3.5" />
+        <span className="text-xs font-medium">{delta}</span>
+      </span>
+    );
+  }
+  return (
+    <span
+      className="inline-flex items-center gap-0.5 text-destructive"
+      title={`Down ${Math.abs(delta)} spot${Math.abs(delta) === 1 ? "" : "s"} since last week`}
+    >
+      <ArrowDown className="h-3.5 w-3.5" />
+      <span className="text-xs font-medium">{Math.abs(delta)}</span>
+    </span>
+  );
 }
 
 interface StandingsResponse {
@@ -59,6 +94,7 @@ export default function StandingsPage() {
           <thead>
             <tr className="border-b border-card-border bg-muted/50 text-left text-xs uppercase tracking-wide text-muted-foreground">
               <th className="px-3 py-2 font-medium">Rank</th>
+              <th className="px-3 py-2 font-medium" title="Change since last graded week">Δ</th>
               <th className="px-3 py-2 font-medium">Member</th>
               {data.weeks.map((w) => (
                 <th key={w.id} className="px-3 py-2 text-center font-medium whitespace-nowrap">
@@ -83,6 +119,9 @@ export default function StandingsPage() {
                   <Badge variant="outline" className={cn("min-w-8 justify-center", rankBadgeClass(row.rank))}>
                     {row.rank}
                   </Badge>
+                </td>
+                <td className="px-3 py-2">
+                  <RankChangeIndicator rank={row.rank} previousRank={row.previousRank} />
                 </td>
                 <td className="px-3 py-2 font-medium">
                   {row.name}

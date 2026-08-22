@@ -158,8 +158,20 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.get("/api/standings", requireAuth, async (_req, res) => {
     const rows = await computeStandings();
     const weeks = await storage.listWeeks();
-    const gradedWeeks = weeks.filter((w) => w.status === "graded");
-    res.json({ rows, weeks: gradedWeeks });
+    const gradedWeeks = weeks.filter((w) => w.status === "graded").sort((a, b) => a.weekNumber - b.weekNumber);
+
+    // Rank-change arrows compare the current standings to how they stood
+    // before the most recently graded week's points were added. Only
+    // meaningful once at least two weeks have been graded.
+    let rowsWithChange = rows;
+    if (gradedWeeks.length >= 2) {
+      const priorWeekIds = gradedWeeks.slice(0, -1).map((w) => w.id);
+      const priorRows = await computeStandings(priorWeekIds);
+      const priorRankByUser = new Map(priorRows.map((r) => [r.userId, r.rank]));
+      rowsWithChange = rows.map((r) => ({ ...r, previousRank: priorRankByUser.get(r.userId) ?? null }));
+    }
+
+    res.json({ rows: rowsWithChange, weeks: gradedWeeks });
   });
 
   // ---------------- CRISTO-BALL ----------------
@@ -275,7 +287,28 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       };
     });
 
-    res.json({ week, games: selectedGames, grid });
+    // Consensus % per game: how the league split on each side, based on
+    // picks actually submitted so far. Follows the same reveal timing as the
+    // grid itself (only computed/returned once the week is locked).
+    const consensus: Record<
+      number,
+      { awayCount: number; homeCount: number; awayPct: number; homePct: number; totalPicks: number }
+    > = {};
+    for (const g of selectedGames) {
+      const gamePicks = weekPicks.filter((p) => p.gameId === g.id);
+      const awayCount = gamePicks.filter((p) => p.selectedTeam === g.awayTeam).length;
+      const homeCount = gamePicks.filter((p) => p.selectedTeam === g.homeTeam).length;
+      const totalPicks = awayCount + homeCount;
+      consensus[g.id] = {
+        awayCount,
+        homeCount,
+        awayPct: totalPicks > 0 ? Math.round((awayCount / totalPicks) * 100) : 0,
+        homePct: totalPicks > 0 ? Math.round((homeCount / totalPicks) * 100) : 0,
+        totalPicks,
+      };
+    }
+
+    res.json({ week, games: selectedGames, grid, consensus });
   });
 
   // ---------------- ADMIN: MEMBERS ----------------
