@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, ChevronRight, Trash2 } from "lucide-react";
+import { formatEastern, easternInputValueToIso } from "@/lib/time";
 import type { Week } from "@shared/schema";
 
 const statusColors: Record<Week["status"], string> = {
@@ -40,7 +41,7 @@ export default function AdminWeeksPage() {
     mutationFn: async () => {
       const res = await apiRequest("POST", "/api/admin/weeks", {
         ...form,
-        pickDeadline: new Date(form.pickDeadline).toISOString(),
+        pickDeadline: easternInputValueToIso(form.pickDeadline),
       });
       return res.json();
     },
@@ -132,7 +133,7 @@ export default function AdminWeeksPage() {
                 />
               </div>
               <div className="flex flex-col gap-1.5">
-                <Label>Pick deadline</Label>
+                <Label>Pick deadline (Eastern Time)</Label>
                 <Input
                   type="datetime-local"
                   value={form.pickDeadline}
@@ -175,7 +176,7 @@ export default function AdminWeeksPage() {
                 <div className="cursor-pointer">
                   <p className="font-medium">{week.label}</p>
                   <p className="text-xs text-muted-foreground">
-                    Locks {new Date(week.pickDeadline).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" })}
+                    Locks {formatEastern(week.pickDeadline, { dateStyle: "medium", timeStyle: "short" })}
                   </p>
                 </div>
               </Link>

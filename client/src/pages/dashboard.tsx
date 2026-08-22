@@ -8,6 +8,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { useState } from "react";
+import { formatEastern } from "@/lib/time";
 import type { Game, Pick, UpsetPick, Week } from "@shared/schema";
 
 interface DashboardResponse {
@@ -100,6 +101,9 @@ export default function DashboardPage() {
           {data && !data.locked && (
             <div className="text-sm">
               Locks in <CountdownTimer deadline={data.week.pickDeadline} />
+              <span className="ml-1 text-xs text-muted-foreground">
+                ({formatEastern(data.week.pickDeadline, { weekday: "short", hour: "numeric", minute: "2-digit" })})
+              </span>
             </div>
           )}
           {weeks.length > 1 && (

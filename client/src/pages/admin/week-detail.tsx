@@ -13,6 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { useToast } from "@/hooks/use-toast";
 import { ArrowLeft, Plus, Trash2, Trophy, DollarSign, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { formatEastern, isoToEasternInputValue, easternInputValueToIso } from "@/lib/time";
 import type { Game, Week } from "@shared/schema";
 
 interface AdminWeekResponse {
@@ -54,7 +55,7 @@ export default function AdminWeekDetailPage() {
           {
             ...gameForm,
             spread: Number(gameForm.spread),
-            kickoff: new Date(gameForm.kickoff).toISOString(),
+            kickoff: easternInputValueToIso(gameForm.kickoff),
             broadcast: gameForm.broadcast || null,
           },
         ],
@@ -142,11 +143,11 @@ export default function AdminWeekDetailPage() {
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2">
           <div className="flex flex-col gap-1.5">
-            <Label>Pick deadline</Label>
+            <Label>Pick deadline (Eastern Time)</Label>
             <Input
               type="datetime-local"
-              defaultValue={week.pickDeadline.slice(0, 16)}
-              onBlur={(e) => e.target.value && updateWeekMutation.mutate({ pickDeadline: new Date(e.target.value).toISOString() })}
+              defaultValue={isoToEasternInputValue(week.pickDeadline)}
+              onBlur={(e) => e.target.value && updateWeekMutation.mutate({ pickDeadline: easternInputValueToIso(e.target.value) })}
               data-testid="input-edit-deadline"
             />
           </div>
@@ -275,7 +276,7 @@ export default function AdminWeekDetailPage() {
                   <Input type="number" step="0.5" value={gameForm.spread} onChange={(e) => setGameForm((f) => ({ ...f, spread: e.target.value }))} data-testid="input-spread" />
                 </div>
                 <div className="flex flex-col gap-1.5 col-span-2">
-                  <Label>Kickoff</Label>
+                  <Label>Kickoff (Eastern Time)</Label>
                   <Input type="datetime-local" value={gameForm.kickoff} onChange={(e) => setGameForm((f) => ({ ...f, kickoff: e.target.value }))} data-testid="input-kickoff" />
                 </div>
                 <div className="flex flex-col gap-1.5 col-span-2">
@@ -309,7 +310,7 @@ export default function AdminWeekDetailPage() {
                     </p>
                     <p className="text-xs text-muted-foreground">
                       {game.favoriteTeam} -{game.spread} · {game.pickType} ·{" "}
-                      {new Date(game.kickoff).toLocaleString("en-US", { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
+                      {formatEastern(game.kickoff, { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
                       {game.broadcast ? ` · ${game.broadcast}` : ""}
                     </p>
                   </div>

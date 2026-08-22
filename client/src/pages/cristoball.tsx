@@ -10,6 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { CountdownTimer } from "@/components/CountdownTimer";
+import { formatEastern } from "@/lib/time";
 import { Sparkles, Trophy } from "lucide-react";
 import {
   CRISTO_BALL_CATEGORIES,
@@ -108,6 +109,9 @@ export default function CristoBallPage() {
         {!locked && lockDeadline && (
           <div className="text-sm">
             Locks in <CountdownTimer deadline={lockDeadline} />
+            <span className="ml-1 text-xs text-muted-foreground">
+              ({formatEastern(lockDeadline, { weekday: "short", hour: "numeric", minute: "2-digit" })})
+            </span>
           </div>
         )}
       </div>

@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { formatEastern } from "@/lib/time";
 import { Tv, Check, X, Coins } from "lucide-react";
 import type { Game, Pick } from "@shared/schema";
 
@@ -9,8 +10,7 @@ function teamLabel(team: string, rank: number | null) {
 }
 
 function formatKickoff(iso: string) {
-  const d = new Date(iso);
-  return d.toLocaleString("en-US", { weekday: "short", hour: "numeric", minute: "2-digit" });
+  return formatEastern(iso, { weekday: "short", hour: "numeric", minute: "2-digit" });
 }
 
 interface GameCardProps {
