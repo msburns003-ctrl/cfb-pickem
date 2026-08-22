@@ -1,5 +1,16 @@
 import { storage } from "./storage";
-import type { Game } from "@shared/schema";
+import type {
+  Game,
+  CristoBallEntry,
+  CristoBallResults,
+  CristoBallPointsBreakdown,
+} from "@shared/schema";
+import {
+  CRISTO_BALL_CATEGORIES,
+  CRISTO_BALL_SEASON_QUESTIONS,
+  CRISTO_BALL_NATIONAL_CHAMP_POINTS,
+  CRISTO_BALL_PLAYOFF_TEAM_POINTS,
+} from "@shared/schema";
 
 export const ATS_THRESHOLD = 5.5; // spread magnitude above which a pick is ATS instead of straight-up
 
@@ -134,21 +145,111 @@ export interface StandingsRow {
   userId: number;
   name: string;
   weeklyPoints: Record<number, number>; // weekId -> points
+  cristoBallPoints: number | null; // null = not graded yet
   totalPoints: number;
   rank: number;
 }
 
 /**
- * Computes season standings across all graded weeks. Ties share the same rank
- * (no tiebreaker), matching the league's historical convention.
+ * Determines the season year standings/Cristo-Ball should key off of: the most
+ * recent season represented among existing weeks, falling back to the current
+ * calendar year if no weeks exist yet.
+ */
+export async function getCurrentSeasonYear(): Promise<number> {
+  const allWeeks = await storage.listWeeks();
+  if (allWeeks.length === 0) return new Date().getFullYear();
+  return Math.max(...allWeeks.map((w) => w.seasonYear));
+}
+
+/**
+ * The Cristo-Ball entry lock deadline mirrors the earliest weekly pick
+ * deadline in the season (i.e. Week 1's deadline) — entries lock at the same
+ * moment the season's first games kick off. Returns null if no weeks exist.
+ */
+export async function getCristoBallLockDeadline(seasonYear: number): Promise<string | null> {
+  const allWeeks = await storage.listWeeks();
+  const seasonWeeks = allWeeks.filter((w) => w.seasonYear === seasonYear);
+  if (seasonWeeks.length === 0) return null;
+  return seasonWeeks.reduce((earliest, w) => (w.pickDeadline < earliest ? w.pickDeadline : earliest), seasonWeeks[0].pickDeadline);
+}
+
+function normalizeAnswer(s: string | null | undefined): string {
+  return (s ?? "").trim().toLowerCase();
+}
+
+/**
+ * Grades a single Cristo-Ball entry against the season's actual results.
+ * Conference champs and season yes/no questions require an exact match;
+ * national champ and playoff-field picks use case-insensitive/trimmed text
+ * matching so minor formatting differences ("Ohio St" vs "Ohio State") don't
+ * need admin intervention as long as the wording matches.
+ */
+export function gradeCristoBallEntry(
+  entry: CristoBallEntry,
+  results: CristoBallResults,
+): { total: number; breakdown: CristoBallPointsBreakdown } {
+  const conferencePoints: Record<string, number> = {};
+  for (const cat of CRISTO_BALL_CATEGORIES) {
+    const actual = results.actualPicks[cat.key];
+    const pick = entry.picks[cat.key];
+    conferencePoints[cat.key] = actual && pick && normalizeAnswer(actual) === normalizeAnswer(pick) ? cat.points : 0;
+  }
+
+  const seasonAnswerPoints: Record<string, number> = {};
+  for (const q of CRISTO_BALL_SEASON_QUESTIONS) {
+    const actual = results.actualSeasonAnswers[q.key];
+    const answer = entry.seasonAnswers[q.key];
+    seasonAnswerPoints[q.key] = actual !== null && actual !== undefined && answer === actual ? q.points : 0;
+  }
+
+  const nationalChampPoints =
+    results.actualNationalChamp &&
+    entry.nationalChampPick &&
+    normalizeAnswer(results.actualNationalChamp) === normalizeAnswer(entry.nationalChampPick)
+      ? CRISTO_BALL_NATIONAL_CHAMP_POINTS
+      : 0;
+
+  const actualPlayoffSet = new Set((results.actualPlayoffTeams ?? []).map(normalizeAnswer).filter(Boolean));
+  const playoffMatches = (entry.playoffPicks ?? []).filter((p) => actualPlayoffSet.has(normalizeAnswer(p))).length;
+  const playoffPoints = playoffMatches * CRISTO_BALL_PLAYOFF_TEAM_POINTS;
+
+  const breakdown: CristoBallPointsBreakdown = {
+    conferencePoints,
+    seasonAnswerPoints,
+    nationalChampPoints,
+    playoffPoints,
+  };
+
+  const total =
+    Object.values(conferencePoints).reduce((a, b) => a + b, 0) +
+    Object.values(seasonAnswerPoints).reduce((a, b) => a + b, 0) +
+    nationalChampPoints +
+    playoffPoints;
+
+  return { total, breakdown };
+}
+
+/**
+ * Computes season standings across all graded weeks, plus Cristo-Ball points
+ * once Cristo-Ball has been graded. Ties share the same rank (no tiebreaker),
+ * matching the league's historical convention.
  */
 export async function computeStandings(): Promise<StandingsRow[]> {
   const allUsers = (await storage.listUsers()).filter((u) => !u.isAdmin || true);
   const allWeeks = await storage.listWeeks();
+  const seasonYear = await getCurrentSeasonYear();
+  const cristoBallResults = await storage.getCristoBallResults(seasonYear);
+  const cristoBallGraded = !!cristoBallResults?.gradedAt;
+  const cristoBallEntries = cristoBallGraded ? await storage.listCristoBallEntries(seasonYear) : [];
+  const cristoBallByUser = new Map(cristoBallEntries.map((e) => [e.userId, e]));
 
-  const totals = new Map<number, { name: string; weeklyPoints: Record<number, number>; total: number }>();
+  const totals = new Map<
+    number,
+    { name: string; weeklyPoints: Record<number, number>; cristoBallPoints: number | null; total: number }
+  >();
   for (const u of allUsers) {
-    totals.set(u.id, { name: u.name, weeklyPoints: {}, total: 0 });
+    const cristoBallPoints = cristoBallGraded ? cristoBallByUser.get(u.id)?.pointsEarned ?? 0 : null;
+    totals.set(u.id, { name: u.name, weeklyPoints: {}, cristoBallPoints, total: cristoBallPoints ?? 0 });
   }
 
   for (const week of allWeeks) {
@@ -173,6 +274,7 @@ export async function computeStandings(): Promise<StandingsRow[]> {
     userId,
     name: v.name,
     weeklyPoints: v.weeklyPoints,
+    cristoBallPoints: v.cristoBallPoints,
     totalPoints: v.total,
     rank: 0,
   }));

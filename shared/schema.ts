@@ -143,3 +143,85 @@ export const insertUpsetPickSchema = z.object({
   submittedAt: z.string().min(1),
 });
 export type InsertUpsetPick = z.infer<typeof insertUpsetPickSchema>;
+
+// ---------- Cristo-Ball (season-long preseason predictions, graded at season end) ----------
+export const CRISTO_BALL_CATEGORIES = [
+  { key: "sec", label: "2026 SEC Champion", points: 20, options: ["Alabama", "Georgia", "LSU", "Oklahoma", "Texas", "Someone Else"] },
+  { key: "bigTen", label: "2026 Big Ten Champion", points: 20, options: ["Indiana", "Ohio State", "Oregon", "USC", "Washington", "Someone Else"] },
+  { key: "acc", label: "2026 ACC Champion", points: 20, options: ["Clemson", "Florida State", "Louisville", "Miami", "SMU", "Someone Else"] },
+  { key: "bigTwelve", label: "2026 Big 12 Champion", points: 20, options: ["Arizona State", "Baylor", "Kansas State", "Texas Tech", "Utah", "Someone Else"] },
+  { key: "mac", label: "2026 MAC Champion", points: 20, options: ["Central Michigan", "Miami (OH)", "Ohio", "Toledo", "Western Michigan", "Someone Else"] },
+  { key: "sunBelt", label: "2026 Sun Belt Champion", points: 20, options: ["Appalachian State", "Georgia Southern", "James Madison", "Marshall", "Troy", "Someone Else"] },
+  { key: "aac", label: "2026 AAC Champion", points: 20, options: ["Army", "Memphis", "Navy", "Tulane", "UTSA", "Someone Else"] },
+  { key: "mountainWest", label: "2026 Mountain West Champion", points: 20, options: ["Air Force", "Hawaii", "North Dakota State", "New Mexico", "UNLV", "Someone Else"] },
+  { key: "cusa", label: "2026 CUSA Champion", points: 20, options: ["Delaware", "Jacksonville State", "Louisiana Tech", "Liberty", "Western Kentucky", "Someone Else"] },
+] as const;
+export type CristoBallCategoryKey = (typeof CRISTO_BALL_CATEGORIES)[number]["key"];
+
+export const CRISTO_BALL_SEASON_QUESTIONS = [
+  { key: "laneVsDabo", label: "Lane wins his 1st game @ LSU over Dopey Dabo", points: 10 },
+  { key: "billBGirlfriend", label: "Foxy Grampa Bill B. knocks up his girlfriend", points: 10 },
+  { key: "winless012", label: "A D-1 team posts a winless 0-12 record", points: 10 },
+  { key: "boiseStatePac12", label: "Boise State wins the Pac-12", points: 10 },
+  { key: "orgeronLsu", label: "Ed Orgeron is the LSU HC for at least 1 game", points: 10 },
+  { key: "champMissedPlayoffs", label: "The national champ missed the 2025 playoffs", points: 10 },
+  { key: "firstNatlChamp", label: "Someone wins their first natl champ as HC", points: 10 },
+] as const;
+export type CristoBallSeasonQuestionKey = (typeof CRISTO_BALL_SEASON_QUESTIONS)[number]["key"];
+
+export const CRISTO_BALL_NATIONAL_CHAMP_POINTS = 50;
+export const CRISTO_BALL_PLAYOFF_TEAM_COUNT = 12;
+export const CRISTO_BALL_PLAYOFF_TEAM_POINTS = 10;
+
+export interface CristoBallPointsBreakdown {
+  conferencePoints: Record<string, number>;
+  seasonAnswerPoints: Record<string, number>;
+  nationalChampPoints: number;
+  playoffPoints: number;
+}
+
+export interface CristoBallEntry {
+  id: number;
+  userId: number;
+  seasonYear: number;
+  picks: Partial<Record<CristoBallCategoryKey, string>>;
+  seasonAnswers: Partial<Record<CristoBallSeasonQuestionKey, boolean | null>>;
+  nationalChampPick: string | null;
+  playoffPicks: string[];
+  tiebreakerGuess: number | null;
+  pointsEarned: number | null;
+  pointsBreakdown: CristoBallPointsBreakdown | null;
+  submittedAt: string;
+  updatedAt: string;
+}
+
+export const insertCristoBallEntrySchema = z.object({
+  seasonYear: z.number().int(),
+  picks: z.record(z.string(), z.string()).optional(),
+  seasonAnswers: z.record(z.string(), z.boolean().nullable()).optional(),
+  nationalChampPick: z.string().nullable().optional(),
+  playoffPicks: z.array(z.string()).max(CRISTO_BALL_PLAYOFF_TEAM_COUNT).optional(),
+  tiebreakerGuess: z.number().int().nullable().optional(),
+});
+export type InsertCristoBallEntry = z.infer<typeof insertCristoBallEntrySchema>;
+
+export interface CristoBallResults {
+  id: number;
+  seasonYear: number;
+  actualPicks: Partial<Record<CristoBallCategoryKey, string>>;
+  actualSeasonAnswers: Partial<Record<CristoBallSeasonQuestionKey, boolean | null>>;
+  actualNationalChamp: string | null;
+  actualPlayoffTeams: string[];
+  actualTiebreaker: number | null;
+  gradedAt: string | null;
+}
+
+export const insertCristoBallResultsSchema = z.object({
+  seasonYear: z.number().int(),
+  actualPicks: z.record(z.string(), z.string().nullable()).optional(),
+  actualSeasonAnswers: z.record(z.string(), z.boolean().nullable()).optional(),
+  actualNationalChamp: z.string().nullable().optional(),
+  actualPlayoffTeams: z.array(z.string()).max(CRISTO_BALL_PLAYOFF_TEAM_COUNT).optional(),
+  actualTiebreaker: z.number().int().nullable().optional(),
+});
+export type InsertCristoBallResults = z.infer<typeof insertCristoBallResultsSchema>;

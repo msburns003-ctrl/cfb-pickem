@@ -2,7 +2,7 @@ import { type ReactNode } from "react";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
-import { Trophy, ListChecks, ShieldCheck, LogOut, User, LayoutGrid } from "lucide-react";
+import { Trophy, ListChecks, ShieldCheck, LogOut, User, LayoutGrid, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 function Logo() {
@@ -22,6 +22,7 @@ const navItems = [
   { href: "/dashboard", label: "This Week", icon: ListChecks },
   { href: "/grid", label: "Grid", icon: LayoutGrid },
   { href: "/standings", label: "Standings", icon: Trophy },
+  { href: "/cristoball", label: "Cristo-Ball", icon: Sparkles },
 ];
 
 export function AppShell({ children }: { children: ReactNode }) {

@@ -17,6 +17,8 @@ import ProfilePage from "@/pages/profile";
 import AdminWeeksPage from "@/pages/admin/weeks";
 import AdminMembersPage from "@/pages/admin/members";
 import AdminWeekDetailPage from "@/pages/admin/week-detail";
+import CristoBallPage from "@/pages/cristoball";
+import AdminCristoBallPage from "@/pages/admin/cristoball";
 
 function FullScreenLoader() {
   return (
@@ -63,6 +65,17 @@ function AppRouter() {
       <Route path="/profile">
         <Protected>
           <ProfilePage />
+        </Protected>
+      </Route>
+      <Route path="/cristoball">
+        <Protected>
+          <CristoBallPage />
+        </Protected>
+      </Route>
+      <Route path="/admin/cristoball">
+        <Protected adminOnly>
+          <AdminNav />
+          <AdminCristoBallPage />
         </Protected>
       </Route>
       <Route path="/admin/members">

@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils";
 const tabs = [
   { href: "/admin", label: "Weeks", match: (p: string) => p === "/admin" || p.startsWith("/admin/weeks") },
   { href: "/admin/members", label: "Members", match: (p: string) => p.startsWith("/admin/members") },
+  { href: "/admin/cristoball", label: "Cristo-Ball", match: (p: string) => p.startsWith("/admin/cristoball") },
 ];
 
 export function AdminNav() {

@@ -3,8 +3,17 @@ import { createServer } from "node:http";
 import type { Server } from "node:http";
 import { storage } from "./storage";
 import { hashPassword, verifyPassword, generateToken, generateTempPassword, requireAuth, requireAdmin, toPublicUser } from "./auth";
-import { computePickType, gradeWeek, upsetPickPoints, computeStandings, ATS_THRESHOLD } from "./scoring";
-import { insertWeekSchema, type InsertWeek } from "@shared/schema";
+import {
+  computePickType,
+  gradeWeek,
+  upsetPickPoints,
+  computeStandings,
+  ATS_THRESHOLD,
+  getCurrentSeasonYear,
+  getCristoBallLockDeadline,
+  gradeCristoBallEntry,
+} from "./scoring";
+import { insertWeekSchema, type InsertWeek, insertCristoBallEntrySchema, insertCristoBallResultsSchema } from "@shared/schema";
 import { z } from "zod";
 
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
@@ -150,6 +159,77 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const weeks = await storage.listWeeks();
     const gradedWeeks = weeks.filter((w) => w.status === "graded");
     res.json({ rows, weeks: gradedWeeks });
+  });
+
+  // ---------------- CRISTO-BALL ----------------
+  app.get("/api/cristoball/me", requireAuth, async (req, res) => {
+    const seasonYear = await getCurrentSeasonYear();
+    const [entry, lockDeadline] = await Promise.all([
+      storage.getCristoBallEntry(req.user!.id, seasonYear),
+      getCristoBallLockDeadline(seasonYear),
+    ]);
+    const locked = lockDeadline != null && Date.now() >= new Date(lockDeadline).getTime();
+    res.json({ seasonYear, entry: entry ?? null, locked, lockDeadline });
+  });
+
+  app.post("/api/cristoball/me", requireAuth, async (req, res) => {
+    const seasonYear = await getCurrentSeasonYear();
+    const lockDeadline = await getCristoBallLockDeadline(seasonYear);
+    const locked = lockDeadline != null && Date.now() >= new Date(lockDeadline).getTime();
+    if (locked) return res.status(403).json({ message: "Cristo-Ball picks are locked for this season" });
+
+    const parsed = insertCristoBallEntrySchema.safeParse({ ...req.body, seasonYear });
+    if (!parsed.success) return res.status(400).json({ message: "Invalid Cristo-Ball submission" });
+
+    const entry = await storage.upsertCristoBallEntry({ ...parsed.data, userId: req.user!.id });
+    res.json({ entry });
+  });
+
+  app.get("/api/admin/cristoball", requireAdmin, async (_req, res) => {
+    const seasonYear = await getCurrentSeasonYear();
+    const [entries, results, users, lockDeadline] = await Promise.all([
+      storage.listCristoBallEntries(seasonYear),
+      storage.getCristoBallResults(seasonYear),
+      storage.listUsers(),
+      getCristoBallLockDeadline(seasonYear),
+    ]);
+    const locked = lockDeadline != null && Date.now() >= new Date(lockDeadline).getTime();
+    const entriesWithNames = entries.map((e) => ({
+      ...e,
+      userName: users.find((u) => u.id === e.userId)?.name ?? "Unknown",
+    }));
+    res.json({
+      seasonYear,
+      entries: entriesWithNames,
+      results: results ?? null,
+      members: users.map((u) => ({ id: u.id, name: u.name })),
+      memberCount: users.length,
+      submittedCount: entries.length,
+      locked,
+      lockDeadline,
+    });
+  });
+
+  app.put("/api/admin/cristoball/results", requireAdmin, async (req, res) => {
+    const seasonYear = await getCurrentSeasonYear();
+    const parsed = insertCristoBallResultsSchema.safeParse({ ...req.body, seasonYear });
+    if (!parsed.success) return res.status(400).json({ message: "Invalid Cristo-Ball results" });
+    const results = await storage.upsertCristoBallResults(parsed.data);
+    res.json({ results });
+  });
+
+  app.post("/api/admin/cristoball/grade", requireAdmin, async (_req, res) => {
+    const seasonYear = await getCurrentSeasonYear();
+    const results = await storage.getCristoBallResults(seasonYear);
+    if (!results) return res.status(400).json({ message: "Enter actual results before grading" });
+
+    const entries = await storage.listCristoBallEntries(seasonYear);
+    for (const entry of entries) {
+      const { total, breakdown } = gradeCristoBallEntry(entry, results);
+      await storage.updateCristoBallEntry(entry.id, { pointsEarned: total, pointsBreakdown: breakdown });
+    }
+    const graded = await storage.markCristoBallGraded(seasonYear, new Date().toISOString());
+    res.json({ results: graded, gradedCount: entries.length });
   });
 
   // ---------------- PICKS GRID ----------------

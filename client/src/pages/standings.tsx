@@ -10,6 +10,7 @@ interface StandingsRow {
   userId: number;
   name: string;
   weeklyPoints: Record<number, number>;
+  cristoBallPoints: number | null;
   totalPoints: number;
   rank: number;
 }
@@ -64,6 +65,7 @@ export default function StandingsPage() {
                   {w.label}
                 </th>
               ))}
+              <th className="px-3 py-2 text-center font-medium whitespace-nowrap">Cristo-Ball</th>
               <th className="px-3 py-2 text-right font-medium">Total</th>
             </tr>
           </thead>
@@ -91,6 +93,7 @@ export default function StandingsPage() {
                     {row.weeklyPoints[w.id] ?? "–"}
                   </td>
                 ))}
+                <td className="px-3 py-2 text-center text-muted-foreground">{row.cristoBallPoints ?? "–"}</td>
                 <td className="px-3 py-2 text-right font-display font-semibold">{row.totalPoints}</td>
               </tr>
             ))}

@@ -9,6 +9,10 @@ import type {
   InsertPick,
   UpsetPick,
   InsertUpsetPick,
+  CristoBallEntry,
+  InsertCristoBallEntry,
+  CristoBallResults,
+  InsertCristoBallResults,
 } from "@shared/schema";
 import supabase from "./supabase";
 
@@ -89,6 +93,15 @@ export interface IStorage {
   listUpsetPicksByWeek(weekId: number): Promise<UpsetPick[]>;
   upsertUpsetPick(pick: InsertUpsetPick): Promise<UpsetPick>;
   updateUpsetPick(id: number, fields: Partial<UpsetPick>): Promise<UpsetPick | undefined>;
+
+  // cristo-ball
+  getCristoBallEntry(userId: number, seasonYear: number): Promise<CristoBallEntry | undefined>;
+  listCristoBallEntries(seasonYear: number): Promise<CristoBallEntry[]>;
+  upsertCristoBallEntry(entry: InsertCristoBallEntry & { userId: number }): Promise<CristoBallEntry>;
+  updateCristoBallEntry(id: number, fields: Partial<CristoBallEntry>): Promise<CristoBallEntry | undefined>;
+  getCristoBallResults(seasonYear: number): Promise<CristoBallResults | undefined>;
+  upsertCristoBallResults(results: InsertCristoBallResults): Promise<CristoBallResults>;
+  markCristoBallGraded(seasonYear: number, gradedAt: string): Promise<CristoBallResults>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -323,6 +336,133 @@ export class DatabaseStorage implements IStorage {
       .maybeSingle();
     assertNoError(error, "updateUpsetPick");
     return rowToCamel<UpsetPick>(data);
+  }
+
+  // ---------- cristo-ball ----------
+  async getCristoBallEntry(userId: number, seasonYear: number): Promise<CristoBallEntry | undefined> {
+    const { data, error } = await supabase
+      .from("cristo_ball_entries")
+      .select("*")
+      .eq("user_id", userId)
+      .eq("season_year", seasonYear)
+      .maybeSingle();
+    assertNoError(error, "getCristoBallEntry");
+    return rowToCamel<CristoBallEntry>(data);
+  }
+  async listCristoBallEntries(seasonYear: number): Promise<CristoBallEntry[]> {
+    const { data, error } = await supabase
+      .from("cristo_ball_entries")
+      .select("*")
+      .eq("season_year", seasonYear);
+    assertNoError(error, "listCristoBallEntries");
+    return rowsToCamel<CristoBallEntry>(data);
+  }
+  async upsertCristoBallEntry(entry: InsertCristoBallEntry & { userId: number }): Promise<CristoBallEntry> {
+    const existing = await this.getCristoBallEntry(entry.userId, entry.seasonYear);
+    const now = new Date().toISOString();
+    if (existing) {
+      const payload = objectToSnake({
+        picks: entry.picks ?? existing.picks,
+        seasonAnswers: entry.seasonAnswers ?? existing.seasonAnswers,
+        nationalChampPick: entry.nationalChampPick ?? existing.nationalChampPick,
+        playoffPicks: entry.playoffPicks ?? existing.playoffPicks,
+        tiebreakerGuess: entry.tiebreakerGuess ?? existing.tiebreakerGuess,
+        updatedAt: now,
+      });
+      const { data, error } = await supabase
+        .from("cristo_ball_entries")
+        .update(payload)
+        .eq("id", existing.id)
+        .select()
+        .single();
+      assertNoError(error, "upsertCristoBallEntry(update)");
+      return rowToCamel<CristoBallEntry>(data)!;
+    }
+    const payload = objectToSnake({
+      userId: entry.userId,
+      seasonYear: entry.seasonYear,
+      picks: entry.picks ?? {},
+      seasonAnswers: entry.seasonAnswers ?? {},
+      nationalChampPick: entry.nationalChampPick ?? null,
+      playoffPicks: entry.playoffPicks ?? [],
+      tiebreakerGuess: entry.tiebreakerGuess ?? null,
+      submittedAt: now,
+      updatedAt: now,
+    });
+    const { data, error } = await supabase.from("cristo_ball_entries").insert(payload).select().single();
+    assertNoError(error, "upsertCristoBallEntry(insert)");
+    return rowToCamel<CristoBallEntry>(data)!;
+  }
+  async updateCristoBallEntry(id: number, fields: Partial<CristoBallEntry>): Promise<CristoBallEntry | undefined> {
+    const payload = objectToSnake(fields);
+    const { data, error } = await supabase
+      .from("cristo_ball_entries")
+      .update(payload)
+      .eq("id", id)
+      .select()
+      .maybeSingle();
+    assertNoError(error, "updateCristoBallEntry");
+    return rowToCamel<CristoBallEntry>(data);
+  }
+  async getCristoBallResults(seasonYear: number): Promise<CristoBallResults | undefined> {
+    const { data, error } = await supabase
+      .from("cristo_ball_results")
+      .select("*")
+      .eq("season_year", seasonYear)
+      .maybeSingle();
+    assertNoError(error, "getCristoBallResults");
+    return rowToCamel<CristoBallResults>(data);
+  }
+  async upsertCristoBallResults(results: InsertCristoBallResults): Promise<CristoBallResults> {
+    const existing = await this.getCristoBallResults(results.seasonYear);
+    if (existing) {
+      const payload = objectToSnake({
+        actualPicks: results.actualPicks ?? existing.actualPicks,
+        actualSeasonAnswers: results.actualSeasonAnswers ?? existing.actualSeasonAnswers,
+        actualNationalChamp: results.actualNationalChamp ?? existing.actualNationalChamp,
+        actualPlayoffTeams: results.actualPlayoffTeams ?? existing.actualPlayoffTeams,
+        actualTiebreaker: results.actualTiebreaker ?? existing.actualTiebreaker,
+      });
+      const { data, error } = await supabase
+        .from("cristo_ball_results")
+        .update(payload)
+        .eq("id", existing.id)
+        .select()
+        .single();
+      assertNoError(error, "upsertCristoBallResults(update)");
+      return rowToCamel<CristoBallResults>(data)!;
+    }
+    const payload = objectToSnake({
+      seasonYear: results.seasonYear,
+      actualPicks: results.actualPicks ?? {},
+      actualSeasonAnswers: results.actualSeasonAnswers ?? {},
+      actualNationalChamp: results.actualNationalChamp ?? null,
+      actualPlayoffTeams: results.actualPlayoffTeams ?? [],
+      actualTiebreaker: results.actualTiebreaker ?? null,
+    });
+    const { data, error } = await supabase.from("cristo_ball_results").insert(payload).select().single();
+    assertNoError(error, "upsertCristoBallResults(insert)");
+    return rowToCamel<CristoBallResults>(data)!;
+  }
+  async markCristoBallGraded(seasonYear: number, gradedAt: string): Promise<CristoBallResults> {
+    const existing = await this.getCristoBallResults(seasonYear);
+    if (!existing) {
+      const { data, error } = await supabase
+        .from("cristo_ball_results")
+        .insert(objectToSnake({ seasonYear, actualPicks: {}, actualSeasonAnswers: {}, actualPlayoffTeams: [], gradedAt }))
+        .select()
+        .single();
+      assertNoError(error, "markCristoBallGraded(insert)");
+      return rowToCamel<CristoBallResults>(data)!;
+    }
+    const { data, error } = await supabase
+      .from("cristo_ball_results")
+      .update({ graded_at: gradedAt })
+      .eq("id", existing.id)
+      .select()
+      .single();
+    assertNoError(error, "markCristoBallGraded(update)");
+    return rowToCamel<CristoBallResults>(data)!;
   }
 
   // ---------- helpers ----------
