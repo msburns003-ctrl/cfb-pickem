@@ -23,8 +23,10 @@ interface GameCardProps {
 
 export function GameCard({ game, pick, locked, onPick, submitting }: GameCardProps) {
   const isFavoriteAway = game.favoriteTeam === game.awayTeam;
-  const awayLine = game.pickType === "ATS" ? (isFavoriteAway ? `-${game.spread}` : `+${game.spread}`) : null;
-  const homeLine = game.pickType === "ATS" ? (isFavoriteAway ? `+${game.spread}` : `-${game.spread}`) : null;
+  // Always show the spread as reference info, even for straight-up games —
+  // it just isn't the basis for grading unless pickType is "ATS".
+  const awayLine = isFavoriteAway ? `-${game.spread}` : `+${game.spread}`;
+  const homeLine = isFavoriteAway ? `+${game.spread}` : `-${game.spread}`;
 
   const graded = game.status === "final" && pick?.pointsEarned != null;
 
@@ -71,8 +73,7 @@ export function GameCard({ game, pick, locked, onPick, submitting }: GameCardPro
               data-testid={`button-pick-${game.id}-${team.replace(/\s/g, "-")}`}
             >
               <span className="text-sm font-semibold leading-tight">{teamLabel(team, rank)}</span>
-              {line && <span className="text-xs opacity-80">{line}</span>}
-              {team === game.favoriteTeam && !line && <span className="text-xs opacity-80">Favorite</span>}
+              <span className="text-xs opacity-80">{line}</span>
             </Button>
           );
         })}

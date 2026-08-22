@@ -36,6 +36,11 @@ function shortTeam(name: string) {
   return name.length > 12 ? name.slice(0, 11) + "…" : name;
 }
 
+function shortTeamLabel(name: string, rank: number | null) {
+  const label = shortTeam(name);
+  return rank ? `#${rank} ${label}` : label;
+}
+
 export default function GridPage() {
   const { user } = useAuth();
   const { data: weeksData } = useWeeksList();
@@ -107,8 +112,14 @@ export default function GridPage() {
                     <th className="sticky left-0 z-10 bg-muted/50 px-3 py-2 font-medium">Member</th>
                     {data.games.map((g) => (
                       <th key={g.id} className="px-3 py-2 text-center font-medium whitespace-nowrap">
-                        {g.awayTeam} @ {g.homeTeam}
-                        {g.isMoneyGame && <Badge variant="outline" className="ml-1 text-accent">$</Badge>}
+                        <div>
+                          {shortTeamLabel(g.awayTeam, g.awayRank)} @ {shortTeamLabel(g.homeTeam, g.homeRank)}
+                          {g.isMoneyGame && <Badge variant="outline" className="ml-1 text-accent">$</Badge>}
+                        </div>
+                        <div className="mt-0.5 text-[10px] font-normal text-muted-foreground/80">
+                          {g.favoriteTeam === g.awayTeam ? "-" : "+"}
+                          {g.spread}
+                        </div>
                       </th>
                     ))}
                     <th className="px-3 py-2 text-center font-medium whitespace-nowrap">

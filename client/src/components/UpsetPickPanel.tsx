@@ -5,6 +5,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Flame, Check, X } from "lucide-react";
 import type { Game, UpsetPick } from "@shared/schema";
 
+function teamLabel(team: string, rank: number | null) {
+  return rank ? `#${rank} ${team}` : team;
+}
+
 function upsetPickPoints(spread: number): number {
   const s = Math.abs(spread);
   if (s >= 15) return 3;
@@ -33,10 +37,18 @@ export function UpsetPickPanel({ availableGames, myUpsetPick, locked, onSubmit, 
           <Flame className="h-3.5 w-3.5" /> Underdog bonus pick
         </div>
         <p className="mt-2 text-sm font-semibold" data-testid="text-upset-pick-team">
-          {myUpsetPick.underdogTeam} <span className="text-muted-foreground">+{myUpsetPick.spread}</span>
+          {teamLabel(
+            myUpsetPick.underdogTeam,
+            game && myUpsetPick.underdogTeam === game.awayTeam ? game.awayRank : game?.homeRank ?? null,
+          )}{" "}
+          <span className="text-muted-foreground">+{myUpsetPick.spread}</span>
         </p>
         <p className="text-xs text-muted-foreground">
-          vs. {myUpsetPick.favoriteTeam} · worth {upsetPickPoints(myUpsetPick.spread)} point
+          vs. {teamLabel(
+            myUpsetPick.favoriteTeam,
+            game && myUpsetPick.favoriteTeam === game.awayTeam ? game.awayRank : game?.homeRank ?? null,
+          )}{" "}
+          · worth {upsetPickPoints(myUpsetPick.spread)} point
           {upsetPickPoints(myUpsetPick.spread) === 1 ? "" : "s"} if they win outright
         </p>
         {graded && (
@@ -84,11 +96,14 @@ export function UpsetPickPanel({ availableGames, myUpsetPick, locked, onSubmit, 
             </SelectTrigger>
             <SelectContent>
               {availableGames.map((g) => {
-                const underdog = g.favoriteTeam === g.awayTeam ? g.homeTeam : g.awayTeam;
+                const underdogIsAway = g.favoriteTeam !== g.awayTeam;
+                const underdog = underdogIsAway ? g.awayTeam : g.homeTeam;
+                const underdogRank = underdogIsAway ? g.awayRank : g.homeRank;
+                const favoriteRank = underdogIsAway ? g.homeRank : g.awayRank;
                 const pts = upsetPickPoints(g.spread);
                 return (
                   <SelectItem key={g.id} value={String(g.id)}>
-                    {underdog} (+{g.spread}) vs {g.favoriteTeam} — {pts} pt{pts === 1 ? "" : "s"}
+                    {teamLabel(underdog, underdogRank)} (+{g.spread}) vs {teamLabel(g.favoriteTeam, favoriteRank)} — {pts} pt{pts === 1 ? "" : "s"}
                   </SelectItem>
                 );
               })}
