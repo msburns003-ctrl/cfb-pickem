@@ -20,9 +20,9 @@ function Logo() {
 
 const navItems = [
   { href: "/dashboard", label: "This Week", icon: ListChecks },
+  { href: "/cristoball", label: "Cristo-Ball", icon: Sparkles },
   { href: "/grid", label: "Grid", icon: LayoutGrid },
   { href: "/standings", label: "Standings", icon: Trophy },
-  { href: "/cristoball", label: "Cristo-Ball", icon: Sparkles },
 ];
 
 export function AppShell({ children }: { children: ReactNode }) {

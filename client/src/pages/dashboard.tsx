@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
+import { Link } from "wouter";
 import { GameCard } from "@/components/GameCard";
 import { UpsetPickPanel } from "@/components/UpsetPickPanel";
 import { CountdownTimer } from "@/components/CountdownTimer";
@@ -9,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { useState } from "react";
 import { formatEastern } from "@/lib/time";
+import { Sparkles, ArrowRight } from "lucide-react";
 import type { Game, Pick, UpsetPick, Week } from "@shared/schema";
 
 interface DashboardResponse {
@@ -85,6 +87,20 @@ export default function DashboardPage() {
 
   return (
     <div className="flex flex-col gap-6">
+      <Link
+        href="/cristoball"
+        className="flex items-center justify-between gap-3 rounded-lg border border-accent/30 bg-accent/10 px-4 py-3 text-sm transition-colors hover:bg-accent/20"
+        data-testid="link-cristoball-banner"
+      >
+        <span className="flex items-center gap-2 font-medium text-accent-foreground">
+          <Sparkles className="h-4 w-4 text-accent" />
+          Made your season-long Cristo-Ball predictions yet?
+        </span>
+        <span className="flex items-center gap-1 text-accent shrink-0">
+          Go to Cristo-Ball
+          <ArrowRight className="h-4 w-4" />
+        </span>
+      </Link>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="font-display text-xl font-semibold tracking-tight" data-testid="text-week-label">
