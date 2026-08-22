@@ -21,9 +21,28 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
+// Keep the auth token in the page's real URL query string (before the `#`),
+// not the hash. wouter's hash router only ever reads `location.hash` for
+// routing, so a token living in `location.search` never interferes with
+// navigation, and client-side route changes preserve the existing search
+// string automatically. Because it's part of the URL, the session survives
+// full page reloads and mobile browsers reloading a backgrounded tab —
+// the exact case that previously logged people out every time they left
+// the page — without needing any storage API blocked in the preview iframe.
+function persistTokenInUrl(token: string | null) {
+  const url = new URL(window.location.href);
+  if (token) {
+    url.searchParams.set("token", token);
+  } else {
+    url.searchParams.delete("token");
+  }
+  window.history.replaceState(window.history.state, "", url.toString());
+}
+
 function buildQuickAccessLink(token: string): string {
-  const base = `${window.location.origin}${window.location.pathname}`;
-  return `${base}#/dashboard?token=${token}`;
+  const url = new URL(window.location.href);
+  url.searchParams.set("token", token);
+  return url.toString();
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -45,19 +64,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   useEffect(() => {
-    // Restore a session from a bookmarked quick-access link (#/path?token=...)
-    const hash = window.location.hash;
-    const queryIndex = hash.indexOf("?");
-    if (queryIndex !== -1) {
-      const params = new URLSearchParams(hash.slice(queryIndex + 1));
-      const token = params.get("token");
-      if (token) {
-        setAuthToken(token);
-        setQuickAccessLink(buildQuickAccessLink(token));
-        // Strip the token from the visible URL bar without losing the path
-        const path = hash.slice(1, queryIndex);
-        window.history.replaceState(null, "", `${window.location.pathname}#${path}`);
+    // Restore a session, preferring a token in the real query string (the
+    // form the app keeps in sync automatically across reloads/navigation).
+    let token = new URLSearchParams(window.location.search).get("token");
+
+    // Fall back to a legacy bookmarked quick-access link that embedded the
+    // token inside the hash (#/path?token=...) instead of the real query.
+    if (!token) {
+      const hash = window.location.hash;
+      const queryIndex = hash.indexOf("?");
+      if (queryIndex !== -1) {
+        const hashParams = new URLSearchParams(hash.slice(queryIndex + 1));
+        const hashToken = hashParams.get("token");
+        if (hashToken) {
+          token = hashToken;
+          // Strip it from the hash so the router doesn't choke on the query part.
+          const path = hash.slice(1, queryIndex);
+          window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}#${path}`);
+        }
       }
+    }
+
+    if (token) {
+      setAuthToken(token);
+      setQuickAccessLink(buildQuickAccessLink(token));
+      persistTokenInUrl(token);
     }
     loadMe();
   }, []);
@@ -67,6 +98,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const data = await res.json();
     setAuthToken(data.token);
     setQuickAccessLink(buildQuickAccessLink(data.token));
+    persistTokenInUrl(data.token);
     setUser(data.user);
   }
 
@@ -78,6 +110,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     setAuthToken(null);
     setQuickAccessLink(null);
+    persistTokenInUrl(null);
     setUser(null);
   }
 
