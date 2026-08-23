@@ -4,17 +4,15 @@ import { apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { Copy, Check } from "lucide-react";
 
 export default function ProfilePage() {
-  const { user, quickAccessLink, refreshUser } = useAuth();
+  const { user, refreshUser } = useAuth();
   const { toast } = useToast();
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [copied, setCopied] = useState(false);
 
   async function handleChangePassword(e: React.FormEvent) {
     e.preventDefault();
@@ -32,13 +30,6 @@ export default function ProfilePage() {
     }
   }
 
-  async function copyLink() {
-    if (!quickAccessLink) return;
-    await navigator.clipboard.writeText(quickAccessLink);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  }
-
   return (
     <div className="flex flex-col gap-6">
       <h1 className="font-display text-xl font-semibold tracking-tight">Profile</h1>
@@ -53,23 +44,6 @@ export default function ProfilePage() {
           </p>
         </CardContent>
       </Card>
-
-      {quickAccessLink && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Quick access link</CardTitle>
-            <CardDescription>
-              Bookmark this link to jump straight to your picks next time, without typing your password.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="flex items-center gap-2">
-            <Input readOnly value={quickAccessLink} className="text-xs" data-testid="input-quick-access-link" />
-            <Button variant="outline" size="icon" onClick={copyLink} data-testid="button-copy-link">
-              {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-            </Button>
-          </CardContent>
-        </Card>
-      )}
 
       <Card>
         <CardHeader>

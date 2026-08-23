@@ -1,5 +1,4 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
-import { getAuthToken } from "./auth-token";
 
 const API_BASE = "__PORT_5000__".startsWith("__") ? "" : "__PORT_5000__";
 
@@ -16,11 +15,12 @@ async function throwIfResNotOk(res: Response) {
   }
 }
 
-function authHeaders(hasBody: boolean): Record<string, string> {
+// The session is an httpOnly cookie set by the server on login, so the
+// browser attaches it automatically — the client never reads or stores the
+// token itself. `credentials: "include"` makes fetch send that cookie.
+function requestHeaders(hasBody: boolean): Record<string, string> {
   const headers: Record<string, string> = {};
   if (hasBody) headers["Content-Type"] = "application/json";
-  const token = getAuthToken();
-  if (token) headers["Authorization"] = `Bearer ${token}`;
   return headers;
 }
 
@@ -32,8 +32,9 @@ export async function apiRequest(
 ): Promise<Response> {
   const res = await fetch(`${API_BASE}${url}`, {
     method,
-    headers: authHeaders(!!data),
+    headers: requestHeaders(!!data),
     body: data ? JSON.stringify(data) : undefined,
+    credentials: "include",
   });
 
   if (!opts?.allowStatuses?.includes(res.status)) {
@@ -49,7 +50,8 @@ export const getQueryFn: <T>(options: {
   ({ on401: unauthorizedBehavior }) =>
   async ({ queryKey }) => {
     const res = await fetch(`${API_BASE}${queryKey.join("/")}`, {
-      headers: authHeaders(false),
+      headers: requestHeaders(false),
+      credentials: "include",
     });
 
     if (unauthorizedBehavior === "returnNull" && res.status === 401) {

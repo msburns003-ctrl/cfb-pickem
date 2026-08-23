@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { createServer } from "node:http";
 import type { Server } from "node:http";
 import { storage } from "./storage";
-import { hashPassword, verifyPassword, generateToken, generateTempPassword, requireAuth, requireAdmin, toPublicUser } from "./auth";
+import { hashPassword, verifyPassword, generateToken, generateTempPassword, requireAuth, requireAdmin, toPublicUser, setAuthCookie, clearAuthCookie } from "./auth";
 import {
   computePickType,
   gradeWeek,
@@ -29,11 +29,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
     const token = generateToken();
     await storage.updateUser(user.id, { authToken: token });
-    res.json({ user: toPublicUser({ ...user, authToken: token }), token });
+    setAuthCookie(req, res, token);
+    res.json({ user: toPublicUser({ ...user, authToken: token }) });
   });
 
   app.post("/api/auth/logout", requireAuth, async (req, res) => {
     await storage.updateUser(req.user!.id, { authToken: null });
+    clearAuthCookie(req, res);
     res.json({ ok: true });
   });
 
