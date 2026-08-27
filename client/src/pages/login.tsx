@@ -35,12 +35,15 @@ export default function LoginPage() {
       <Card className="w-full max-w-sm border-sidebar-border bg-card">
         <CardHeader className="flex flex-col items-center gap-2 pb-2 pt-8">
           <svg viewBox="0 0 32 32" className="h-10 w-10" aria-hidden>
-            <path
-              d="M6 16 L14 8 L26 8 L26 12 L18 12 L18 20 L26 20 L26 24 L14 24 Z"
-              fill="currentColor"
-              className="text-primary"
-            />
-            <circle cx="9" cy="16" r="3.5" fill="currentColor" className="text-accent" />
+            <g fill="currentColor" className="text-primary">
+              <rect x="-2.3" y="-15.5" width="4.6" height="17" rx="2.3" transform="translate(11,24) rotate(-28)" />
+              <rect x="-2.3" y="-15.5" width="4.6" height="17" rx="2.3" transform="translate(21,24) rotate(28)" />
+            </g>
+            <g fill="currentColor" className="text-accent">
+              <circle cx="9" cy="6" r="1.7" />
+              <circle cx="14.5" cy="2.6" r="1.1" />
+              <circle cx="20" cy="6" r="1.4" />
+            </g>
           </svg>
           <h1 className="font-display text-xl font-semibold tracking-tight">College Pick&apos;em</h1>
           <p className="text-center text-sm text-muted-foreground">Sign in to make your weekly picks</p>
