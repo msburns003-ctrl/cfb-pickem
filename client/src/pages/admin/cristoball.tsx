@@ -171,7 +171,11 @@ export default function AdminCristoBallPage() {
               <div key={m.id} className="flex items-center justify-between rounded-md border border-card-border px-3 py-2 text-sm" data-testid={`row-cristoball-progress-${m.id}`}>
                 <span>{m.name}</span>
                 <span className="text-xs text-muted-foreground">
-                  {entry ? (entry.pointsEarned != null ? `${entry.pointsEarned} pts` : "Submitted") : "Not yet"}
+                  {entry
+                    ? entry.pointsEarned != null
+                      ? `${entry.pointsEarned} ${entry.pointsEarned === 1 ? "pt" : "pts"}`
+                      : "Submitted"
+                    : "Not yet"}
                 </span>
               </div>
             );
@@ -307,8 +311,8 @@ export default function AdminCristoBallPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Actual CFB Playoff field</CardTitle>
-          <CardDescription>Enter all {CRISTO_BALL_PLAYOFF_TEAM_COUNT} teams that made the playoff. Order doesn't matter.</CardDescription>
+          <CardTitle className="text-base">Actual CFP Final Four</CardTitle>
+          <CardDescription>Enter all {CRISTO_BALL_PLAYOFF_TEAM_COUNT} teams that reached the national semifinals. Order doesn't matter.</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-2 sm:grid-cols-2">
           {actualPlayoffTeams.map((val, i) => (

@@ -146,32 +146,32 @@ export type InsertUpsetPick = z.infer<typeof insertUpsetPickSchema>;
 
 // ---------- Cristo-Ball (season-long preseason predictions, graded at season end) ----------
 export const CRISTO_BALL_CATEGORIES = [
-  { key: "sec", label: "2026 SEC Champion", points: 20, options: ["Alabama", "Georgia", "LSU", "Oklahoma", "Texas", "Someone Else"] },
-  { key: "bigTen", label: "2026 Big Ten Champion", points: 20, options: ["Indiana", "Ohio State", "Oregon", "USC", "Washington", "Someone Else"] },
-  { key: "acc", label: "2026 ACC Champion", points: 20, options: ["Clemson", "Florida State", "Louisville", "Miami", "SMU", "Someone Else"] },
-  { key: "bigTwelve", label: "2026 Big 12 Champion", points: 20, options: ["Arizona State", "Baylor", "Kansas State", "Texas Tech", "Utah", "Someone Else"] },
-  { key: "mac", label: "2026 MAC Champion", points: 20, options: ["Central Michigan", "Miami (OH)", "Ohio", "Toledo", "Western Michigan", "Someone Else"] },
-  { key: "sunBelt", label: "2026 Sun Belt Champion", points: 20, options: ["Appalachian State", "Georgia Southern", "James Madison", "Marshall", "Troy", "Someone Else"] },
-  { key: "aac", label: "2026 AAC Champion", points: 20, options: ["Army", "Memphis", "Navy", "Tulane", "UTSA", "Someone Else"] },
-  { key: "mountainWest", label: "2026 Mountain West Champion", points: 20, options: ["Air Force", "Hawaii", "North Dakota State", "New Mexico", "UNLV", "Someone Else"] },
-  { key: "cusa", label: "2026 CUSA Champion", points: 20, options: ["Delaware", "Jacksonville State", "Louisiana Tech", "Liberty", "Western Kentucky", "Someone Else"] },
+  { key: "sec", label: "2026 SEC Champion", points: 3, options: ["Alabama", "Georgia", "LSU", "Oklahoma", "Texas", "Someone Else"] },
+  { key: "bigTen", label: "2026 Big Ten Champion", points: 3, options: ["Indiana", "Ohio State", "Oregon", "USC", "Washington", "Someone Else"] },
+  { key: "acc", label: "2026 ACC Champion", points: 3, options: ["Clemson", "Florida State", "Louisville", "Miami", "SMU", "Someone Else"] },
+  { key: "bigTwelve", label: "2026 Big 12 Champion", points: 3, options: ["Arizona State", "Baylor", "Kansas State", "Texas Tech", "Utah", "Someone Else"] },
+  { key: "mac", label: "2026 MAC Champion", points: 3, options: ["Central Michigan", "Miami (OH)", "Ohio", "Toledo", "Western Michigan", "Someone Else"] },
+  { key: "sunBelt", label: "2026 Sun Belt Champion", points: 3, options: ["Appalachian State", "Georgia Southern", "James Madison", "Marshall", "Troy", "Someone Else"] },
+  { key: "aac", label: "2026 AAC Champion", points: 3, options: ["Army", "Memphis", "Navy", "Tulane", "UTSA", "Someone Else"] },
+  { key: "mountainWest", label: "2026 Mountain West Champion", points: 3, options: ["Air Force", "Hawaii", "North Dakota State", "New Mexico", "UNLV", "Someone Else"] },
+  { key: "cusa", label: "2026 CUSA Champion", points: 3, options: ["Delaware", "Jacksonville State", "Louisiana Tech", "Liberty", "Western Kentucky", "Someone Else"] },
 ] as const;
 export type CristoBallCategoryKey = (typeof CRISTO_BALL_CATEGORIES)[number]["key"];
 
 export const CRISTO_BALL_SEASON_QUESTIONS = [
-  { key: "georgiaDrivingViolation", label: "Will a Georgia player have a mid-season driving violation or accident?", points: 5 },
-  { key: "power4CoachFired", label: "Will a Power 4 coach be fired before November?", points: 5 },
-  { key: "secCfpChampGame", label: "Will an SEC team make the CFP National Championship game?", points: 5 },
-  { key: "kiffinTenWins", label: "Will Lane Kiffin lead LSU to 10+ wins in his first season?", points: 5 },
-  { key: "lsuOleMissFight", label: "Will there be a fight during the LSU-Ole Miss game (players or coaches)?", points: 5 },
-  { key: "uncWinningRecord", label: "Will Bill Belichick's UNC team finish with a winning record?", points: 5 },
-  { key: "archManningHeisman", label: "Will Arch Manning finish as a Heisman finalist?", points: 5 },
-  { key: "pac12Top25", label: "Will the relaunched Pac-12 have a team finish ranked in the AP Top 25?", points: 5 },
-  { key: "top10sMissPlayoff", label: "Will at least 3 preseason AP Top 10 teams miss the playoff entirely?", points: 5 },
-  { key: "mcafeeSuspended", label: "Will Pat McAfee get suspended from GameDay for at least one week?", points: 5 },
-  { key: "nonQbHeisman", label: "Will a non-quarterback (RB, WR, or defensive player) win the Heisman Trophy?", points: 5 },
-  { key: "rivalryCloseGame", label: "Will any of these rivalry games (Ohio State-Michigan, Texas-Oklahoma, Auburn-Alabama, Army-Navy) be decided by 3 points or less?", points: 5 },
-  { key: "freshmanRbWrLeadsYards", label: "Will a true freshman running back or receiver lead a Power 4 team in yards from scrimmage?", points: 5 },
+  { key: "georgiaDrivingViolation", label: "Will a Georgia player have a mid-season driving violation or accident?", points: 1 },
+  { key: "power4CoachFired", label: "Will a Power 4 coach be fired before November?", points: 1 },
+  { key: "secCfpChampGame", label: "Will an SEC team make the CFP National Championship game?", points: 1 },
+  { key: "kiffinTenWins", label: "Will Lane Kiffin lead LSU to 10+ wins in his first season?", points: 1 },
+  { key: "lsuOleMissFight", label: "Will there be a fight during the LSU-Ole Miss game (players or coaches)?", points: 1 },
+  { key: "uncWinningRecord", label: "Will Bill Belichick's UNC team finish with a winning record?", points: 1 },
+  { key: "archManningHeisman", label: "Will Arch Manning finish as a Heisman finalist?", points: 1 },
+  { key: "pac12Top25", label: "Will the relaunched Pac-12 have a team finish ranked in the AP Top 25?", points: 1 },
+  { key: "top10sMissPlayoff", label: "Will at least 3 preseason AP Top 10 teams miss the playoff entirely?", points: 1 },
+  { key: "mcafeeSuspended", label: "Will Pat McAfee get suspended from GameDay for at least one week?", points: 1 },
+  { key: "nonQbHeisman", label: "Will a non-quarterback (RB, WR, or defensive player) win the Heisman Trophy?", points: 1 },
+  { key: "rivalryCloseGame", label: "Will any of these rivalry games (Ohio State-Michigan, Texas-Oklahoma, Auburn-Alabama, Army-Navy) be decided by 3 points or less?", points: 1 },
+  { key: "freshmanRbWrLeadsYards", label: "Will a true freshman running back or receiver lead a Power 4 team in yards from scrimmage?", points: 1 },
 ] as const;
 export type CristoBallSeasonQuestionKey = (typeof CRISTO_BALL_SEASON_QUESTIONS)[number]["key"];
 
@@ -179,32 +179,32 @@ export const CRISTO_BALL_CHOICE_QUESTIONS = [
   {
     key: "firstArrestConference",
     label: "Which conference will have the first arrested player?",
-    points: 5,
+    points: 1,
     options: ["SEC", "Big Ten", "ACC", "Big 12", "Other"],
   },
 ] as const;
 export type CristoBallChoiceQuestionKey = (typeof CRISTO_BALL_CHOICE_QUESTIONS)[number]["key"];
 
 export const CRISTO_BALL_WIN_TOTALS = [
-  { key: "oklahoma", team: "Oklahoma", line: 8.5, points: 2 },
-  { key: "southCarolina", team: "South Carolina", line: 6.5, points: 2 },
-  { key: "texas", team: "Texas", line: 9.5, points: 2 },
-  { key: "maryland", team: "Maryland", line: 5.5, points: 2 },
-  { key: "indiana", team: "Indiana", line: 10.5, points: 2 },
-  { key: "ncState", team: "NC State", line: 7.5, points: 2 },
-  { key: "virginiaTech", team: "Virginia Tech", line: 7.5, points: 2 },
-  { key: "westVirginia", team: "West Virginia", line: 7.5, points: 2 },
-  { key: "army", team: "Army", line: 7.5, points: 2 },
-  { key: "navy", team: "Navy", line: 8.5, points: 2 },
-  { key: "airForce", team: "Air Force", line: 7.5, points: 2 },
-  { key: "notreDame", team: "Notre Dame", line: 10.5, points: 2 },
+  { key: "oklahoma", team: "Oklahoma", line: 8.5, points: 1 },
+  { key: "southCarolina", team: "South Carolina", line: 6.5, points: 1 },
+  { key: "texas", team: "Texas", line: 9.5, points: 1 },
+  { key: "maryland", team: "Maryland", line: 5.5, points: 1 },
+  { key: "indiana", team: "Indiana", line: 10.5, points: 1 },
+  { key: "ncState", team: "NC State", line: 7.5, points: 1 },
+  { key: "virginiaTech", team: "Virginia Tech", line: 7.5, points: 1 },
+  { key: "westVirginia", team: "West Virginia", line: 7.5, points: 1 },
+  { key: "army", team: "Army", line: 7.5, points: 1 },
+  { key: "navy", team: "Navy", line: 8.5, points: 1 },
+  { key: "airForce", team: "Air Force", line: 7.5, points: 1 },
+  { key: "notreDame", team: "Notre Dame", line: 10.5, points: 1 },
 ] as const;
 export type CristoBallWinTotalKey = (typeof CRISTO_BALL_WIN_TOTALS)[number]["key"];
 export type CristoBallWinTotalPick = "over" | "under";
 
-export const CRISTO_BALL_NATIONAL_CHAMP_POINTS = 50;
-export const CRISTO_BALL_PLAYOFF_TEAM_COUNT = 12;
-export const CRISTO_BALL_PLAYOFF_TEAM_POINTS = 10;
+export const CRISTO_BALL_NATIONAL_CHAMP_POINTS = 5;
+export const CRISTO_BALL_PLAYOFF_TEAM_COUNT = 4;
+export const CRISTO_BALL_PLAYOFF_TEAM_POINTS = 2;
 
 export interface CristoBallPointsBreakdown {
   conferencePoints: Record<string, number>;

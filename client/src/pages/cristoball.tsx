@@ -25,6 +25,11 @@ import {
 
 const SEASON_QUESTION_POINTS = CRISTO_BALL_SEASON_QUESTIONS[0]?.points ?? 5;
 
+function ptsLabel(n: number, each = false): string {
+  const unit = n === 1 ? "pt" : "pts";
+  return each ? `${n} ${unit} each` : `${n} ${unit}`;
+}
+
 interface CristoBallMeResponse {
   seasonYear: number;
   entry: CristoBallEntry | null;
@@ -147,7 +152,7 @@ export default function CristoBallPage() {
               <Trophy className="h-4 w-4 text-accent" /> Your Cristo-Ball score
             </span>
             <Badge className="bg-accent text-accent-foreground text-base px-3 py-1" data-testid="badge-cristoball-score">
-              {data.entry.pointsEarned} pts
+              {ptsLabel(data.entry.pointsEarned)}
             </Badge>
           </CardContent>
         </Card>
@@ -159,7 +164,7 @@ export default function CristoBallPage() {
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center justify-between">
                 <span>{cat.label}</span>
-                <Badge variant="outline">{cat.points} pts</Badge>
+                <Badge variant="outline">{ptsLabel(cat.points)}</Badge>
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -187,7 +192,7 @@ export default function CristoBallPage() {
         <CardHeader>
           <CardTitle className="text-base flex items-center justify-between">
             <span>This season...</span>
-            <Badge variant="outline">{SEASON_QUESTION_POINTS} pts each</Badge>
+            <Badge variant="outline">{ptsLabel(SEASON_QUESTION_POINTS, true)}</Badge>
           </CardTitle>
           <CardDescription>Predict whether each of these will happen this season.</CardDescription>
         </CardHeader>
@@ -225,7 +230,7 @@ export default function CristoBallPage() {
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center justify-between">
                 <span>{q.label}</span>
-                <Badge variant="outline">{q.points} pts</Badge>
+                <Badge variant="outline">{ptsLabel(q.points)}</Badge>
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -253,7 +258,7 @@ export default function CristoBallPage() {
         <CardHeader>
           <CardTitle className="text-base flex items-center justify-between">
             <span>Win Totals</span>
-            <Badge variant="outline">{CRISTO_BALL_WIN_TOTALS[0]?.points ?? 2} pts each</Badge>
+            <Badge variant="outline">{ptsLabel(CRISTO_BALL_WIN_TOTALS[0]?.points ?? 2, true)}</Badge>
           </CardTitle>
           <CardDescription>Pick Over or Under each team's season win total.</CardDescription>
         </CardHeader>
@@ -291,7 +296,7 @@ export default function CristoBallPage() {
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center justify-between">
             <span>2026 National Champion</span>
-            <Badge variant="outline">{CRISTO_BALL_NATIONAL_CHAMP_POINTS} pts</Badge>
+            <Badge variant="outline">{ptsLabel(CRISTO_BALL_NATIONAL_CHAMP_POINTS)}</Badge>
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -308,10 +313,10 @@ export default function CristoBallPage() {
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center justify-between">
-            <span>CFB Playoff Teams (predict all {CRISTO_BALL_PLAYOFF_TEAM_COUNT})</span>
-            <Badge variant="outline">{CRISTO_BALL_PLAYOFF_TEAM_POINTS} pts each</Badge>
+            <span>CFP Final Four (predict all {CRISTO_BALL_PLAYOFF_TEAM_COUNT})</span>
+            <Badge variant="outline">{ptsLabel(CRISTO_BALL_PLAYOFF_TEAM_POINTS, true)}</Badge>
           </CardTitle>
-          <CardDescription>Order doesn't matter — just name {CRISTO_BALL_PLAYOFF_TEAM_COUNT} teams you think make the field.</CardDescription>
+          <CardDescription>Order doesn't matter — just name the {CRISTO_BALL_PLAYOFF_TEAM_COUNT} teams you think reach the national semifinals.</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-2 sm:grid-cols-2">
           {playoffPicks.map((val, i) => (
