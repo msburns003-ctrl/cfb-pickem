@@ -364,6 +364,8 @@ export class DatabaseStorage implements IStorage {
       const payload = objectToSnake({
         picks: entry.picks ?? existing.picks,
         seasonAnswers: entry.seasonAnswers ?? existing.seasonAnswers,
+        choicePicks: entry.choicePicks ?? existing.choicePicks,
+        winTotalPicks: entry.winTotalPicks ?? existing.winTotalPicks,
         nationalChampPick: entry.nationalChampPick ?? existing.nationalChampPick,
         playoffPicks: entry.playoffPicks ?? existing.playoffPicks,
         tiebreakerGuess: entry.tiebreakerGuess ?? existing.tiebreakerGuess,
@@ -383,6 +385,8 @@ export class DatabaseStorage implements IStorage {
       seasonYear: entry.seasonYear,
       picks: entry.picks ?? {},
       seasonAnswers: entry.seasonAnswers ?? {},
+      choicePicks: entry.choicePicks ?? {},
+      winTotalPicks: entry.winTotalPicks ?? {},
       nationalChampPick: entry.nationalChampPick ?? null,
       playoffPicks: entry.playoffPicks ?? [],
       tiebreakerGuess: entry.tiebreakerGuess ?? null,
@@ -419,6 +423,8 @@ export class DatabaseStorage implements IStorage {
       const payload = objectToSnake({
         actualPicks: results.actualPicks ?? existing.actualPicks,
         actualSeasonAnswers: results.actualSeasonAnswers ?? existing.actualSeasonAnswers,
+        actualChoicePicks: results.actualChoicePicks ?? existing.actualChoicePicks,
+        actualWinTotals: results.actualWinTotals ?? existing.actualWinTotals,
         actualNationalChamp: results.actualNationalChamp ?? existing.actualNationalChamp,
         actualPlayoffTeams: results.actualPlayoffTeams ?? existing.actualPlayoffTeams,
         actualTiebreaker: results.actualTiebreaker ?? existing.actualTiebreaker,
@@ -436,6 +442,8 @@ export class DatabaseStorage implements IStorage {
       seasonYear: results.seasonYear,
       actualPicks: results.actualPicks ?? {},
       actualSeasonAnswers: results.actualSeasonAnswers ?? {},
+      actualChoicePicks: results.actualChoicePicks ?? {},
+      actualWinTotals: results.actualWinTotals ?? {},
       actualNationalChamp: results.actualNationalChamp ?? null,
       actualPlayoffTeams: results.actualPlayoffTeams ?? [],
       actualTiebreaker: results.actualTiebreaker ?? null,
@@ -449,7 +457,7 @@ export class DatabaseStorage implements IStorage {
     if (!existing) {
       const { data, error } = await supabase
         .from("cristo_ball_results")
-        .insert(objectToSnake({ seasonYear, actualPicks: {}, actualSeasonAnswers: {}, actualPlayoffTeams: [], gradedAt }))
+        .insert(objectToSnake({ seasonYear, actualPicks: {}, actualSeasonAnswers: {}, actualChoicePicks: {}, actualWinTotals: {}, actualPlayoffTeams: [], gradedAt }))
         .select()
         .single();
       assertNoError(error, "markCristoBallGraded(insert)");

@@ -24,6 +24,8 @@ import {
 import {
   CRISTO_BALL_CATEGORIES,
   CRISTO_BALL_SEASON_QUESTIONS,
+  CRISTO_BALL_CHOICE_QUESTIONS,
+  CRISTO_BALL_WIN_TOTALS,
   CRISTO_BALL_PLAYOFF_TEAM_COUNT,
   type CristoBallEntry,
   type CristoBallResults,
@@ -53,6 +55,8 @@ export default function AdminCristoBallPage() {
 
   const [actualPicks, setActualPicks] = useState<Record<string, string>>({});
   const [actualSeasonAnswers, setActualSeasonAnswers] = useState<Record<string, boolean | null>>({});
+  const [actualChoicePicks, setActualChoicePicks] = useState<Record<string, string>>({});
+  const [actualWinTotals, setActualWinTotals] = useState<Record<string, string>>({});
   const [actualNationalChamp, setActualNationalChamp] = useState("");
   const [actualPlayoffTeams, setActualPlayoffTeams] = useState<string[]>(emptyPlayoffTeams());
   const [actualTiebreaker, setActualTiebreaker] = useState("");
@@ -62,6 +66,11 @@ export default function AdminCristoBallPage() {
     if (data?.results && !initialized) {
       setActualPicks(data.results.actualPicks ?? {});
       setActualSeasonAnswers(data.results.actualSeasonAnswers ?? {});
+      setActualChoicePicks(data.results.actualChoicePicks ?? {});
+      const winTotals = data.results.actualWinTotals ?? {};
+      setActualWinTotals(
+        Object.fromEntries(Object.entries(winTotals).map(([k, v]) => [k, v != null ? String(v) : ""])),
+      );
       setActualNationalChamp(data.results.actualNationalChamp ?? "");
       setActualPlayoffTeams(emptyPlayoffTeams(data.results.actualPlayoffTeams));
       setActualTiebreaker(data.results.actualTiebreaker != null ? String(data.results.actualTiebreaker) : "");
@@ -74,6 +83,12 @@ export default function AdminCristoBallPage() {
       const res = await apiRequest("PUT", "/api/admin/cristoball/results", {
         actualPicks,
         actualSeasonAnswers,
+        actualChoicePicks,
+        actualWinTotals: Object.fromEntries(
+          Object.entries(actualWinTotals)
+            .filter(([, v]) => v.trim() !== "")
+            .map(([k, v]) => [k, Number(v)]),
+        ),
         actualNationalChamp,
         actualPlayoffTeams: actualPlayoffTeams.map((t) => t.trim()),
         actualTiebreaker: actualTiebreaker.trim() === "" ? null : Number(actualTiebreaker),
@@ -219,6 +234,58 @@ export default function AdminCristoBallPage() {
                   </Label>
                 </div>
               </RadioGroup>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Actual choice-question results</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-4 sm:grid-cols-2">
+          {CRISTO_BALL_CHOICE_QUESTIONS.map((q) => (
+            <div key={q.key} className="flex flex-col gap-1.5">
+              <Label>{q.label}</Label>
+              <Select
+                value={actualChoicePicks[q.key] ?? ""}
+                onValueChange={(v) => setActualChoicePicks((prev) => ({ ...prev, [q.key]: v }))}
+              >
+                <SelectTrigger data-testid={`select-actual-${q.key}`}>
+                  <SelectValue placeholder="Not decided yet" />
+                </SelectTrigger>
+                <SelectContent>
+                  {q.options.map((opt) => (
+                    <SelectItem key={opt} value={opt}>
+                      {opt}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Actual win totals</CardTitle>
+          <CardDescription>Enter each team's final regular-season win count once known.</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-4 sm:grid-cols-2">
+          {CRISTO_BALL_WIN_TOTALS.map((w) => (
+            <div key={w.key} className="flex flex-col gap-1.5">
+              <Label>
+                {w.team} <span className="text-muted-foreground">(line {w.line})</span>
+              </Label>
+              <Input
+                type="number"
+                value={actualWinTotals[w.key] ?? ""}
+                onChange={(e) => setActualWinTotals((prev) => ({ ...prev, [w.key]: e.target.value }))}
+                placeholder="e.g. 9"
+                className="max-w-32"
+                data-testid={`input-actual-wintotal-${w.key}`}
+              />
             </div>
           ))}
         </CardContent>

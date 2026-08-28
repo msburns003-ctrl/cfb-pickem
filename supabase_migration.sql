@@ -78,3 +78,38 @@ alter table weeks disable row level security;
 alter table games disable row level security;
 alter table picks disable row level security;
 alter table upset_picks disable row level security;
+
+-- Cristo-Ball (season-long preseason predictions)
+create table if not exists cristo_ball_entries (
+  id serial primary key,
+  user_id integer not null references users(id),
+  season_year integer not null,
+  picks jsonb not null default '{}'::jsonb,
+  season_answers jsonb not null default '{}'::jsonb,
+  choice_picks jsonb not null default '{}'::jsonb,
+  win_total_picks jsonb not null default '{}'::jsonb,
+  national_champ_pick text,
+  playoff_picks jsonb not null default '[]'::jsonb,
+  tiebreaker_guess integer,
+  points_earned integer,
+  points_breakdown jsonb,
+  submitted_at timestamptz not null,
+  updated_at timestamptz not null,
+  unique (user_id, season_year)
+);
+
+create table if not exists cristo_ball_results (
+  id serial primary key,
+  season_year integer not null unique,
+  actual_picks jsonb not null default '{}'::jsonb,
+  actual_season_answers jsonb not null default '{}'::jsonb,
+  actual_choice_picks jsonb not null default '{}'::jsonb,
+  actual_win_totals jsonb not null default '{}'::jsonb,
+  actual_national_champ text,
+  actual_playoff_teams jsonb not null default '[]'::jsonb,
+  actual_tiebreaker integer,
+  graded_at timestamptz
+);
+
+alter table cristo_ball_entries disable row level security;
+alter table cristo_ball_results disable row level security;

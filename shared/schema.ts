@@ -159,15 +159,48 @@ export const CRISTO_BALL_CATEGORIES = [
 export type CristoBallCategoryKey = (typeof CRISTO_BALL_CATEGORIES)[number]["key"];
 
 export const CRISTO_BALL_SEASON_QUESTIONS = [
-  { key: "laneVsDabo", label: "Lane wins his 1st game @ LSU over Dopey Dabo", points: 10 },
-  { key: "billBGirlfriend", label: "Foxy Grampa Bill B. knocks up his girlfriend", points: 10 },
-  { key: "winless012", label: "A D-1 team posts a winless 0-12 record", points: 10 },
-  { key: "boiseStatePac12", label: "Boise State wins the Pac-12", points: 10 },
-  { key: "orgeronLsu", label: "Ed Orgeron is the LSU HC for at least 1 game", points: 10 },
-  { key: "champMissedPlayoffs", label: "The national champ missed the 2025 playoffs", points: 10 },
-  { key: "firstNatlChamp", label: "Someone wins their first natl champ as HC", points: 10 },
+  { key: "georgiaDrivingViolation", label: "Will a Georgia player have a mid-season driving violation or accident?", points: 5 },
+  { key: "power4CoachFired", label: "Will a Power 4 coach be fired before November?", points: 5 },
+  { key: "secCfpChampGame", label: "Will an SEC team make the CFP National Championship game?", points: 5 },
+  { key: "kiffinTenWins", label: "Will Lane Kiffin lead LSU to 10+ wins in his first season?", points: 5 },
+  { key: "lsuOleMissFight", label: "Will there be a fight during the LSU-Ole Miss game (players or coaches)?", points: 5 },
+  { key: "uncWinningRecord", label: "Will Bill Belichick's UNC team finish with a winning record?", points: 5 },
+  { key: "archManningHeisman", label: "Will Arch Manning finish as a Heisman finalist?", points: 5 },
+  { key: "pac12Top25", label: "Will the relaunched Pac-12 have a team finish ranked in the AP Top 25?", points: 5 },
+  { key: "top10sMissPlayoff", label: "Will at least 3 preseason AP Top 10 teams miss the playoff entirely?", points: 5 },
+  { key: "mcafeeSuspended", label: "Will Pat McAfee get suspended from GameDay for at least one week?", points: 5 },
+  { key: "nonQbHeisman", label: "Will a non-quarterback (RB, WR, or defensive player) win the Heisman Trophy?", points: 5 },
+  { key: "rivalryCloseGame", label: "Will any of these rivalry games (Ohio State-Michigan, Texas-Oklahoma, Auburn-Alabama, Army-Navy) be decided by 3 points or less?", points: 5 },
+  { key: "freshmanRbWrLeadsYards", label: "Will a true freshman running back or receiver lead a Power 4 team in yards from scrimmage?", points: 5 },
 ] as const;
 export type CristoBallSeasonQuestionKey = (typeof CRISTO_BALL_SEASON_QUESTIONS)[number]["key"];
+
+export const CRISTO_BALL_CHOICE_QUESTIONS = [
+  {
+    key: "firstArrestConference",
+    label: "Which conference will have the first arrested player?",
+    points: 5,
+    options: ["SEC", "Big Ten", "ACC", "Big 12", "Other"],
+  },
+] as const;
+export type CristoBallChoiceQuestionKey = (typeof CRISTO_BALL_CHOICE_QUESTIONS)[number]["key"];
+
+export const CRISTO_BALL_WIN_TOTALS = [
+  { key: "oklahoma", team: "Oklahoma", line: 8.5, points: 2 },
+  { key: "southCarolina", team: "South Carolina", line: 6.5, points: 2 },
+  { key: "texas", team: "Texas", line: 9.5, points: 2 },
+  { key: "maryland", team: "Maryland", line: 5.5, points: 2 },
+  { key: "indiana", team: "Indiana", line: 10.5, points: 2 },
+  { key: "ncState", team: "NC State", line: 7.5, points: 2 },
+  { key: "virginiaTech", team: "Virginia Tech", line: 7.5, points: 2 },
+  { key: "westVirginia", team: "West Virginia", line: 7.5, points: 2 },
+  { key: "army", team: "Army", line: 7.5, points: 2 },
+  { key: "navy", team: "Navy", line: 8.5, points: 2 },
+  { key: "airForce", team: "Air Force", line: 7.5, points: 2 },
+  { key: "notreDame", team: "Notre Dame", line: 10.5, points: 2 },
+] as const;
+export type CristoBallWinTotalKey = (typeof CRISTO_BALL_WIN_TOTALS)[number]["key"];
+export type CristoBallWinTotalPick = "over" | "under";
 
 export const CRISTO_BALL_NATIONAL_CHAMP_POINTS = 50;
 export const CRISTO_BALL_PLAYOFF_TEAM_COUNT = 12;
@@ -176,6 +209,8 @@ export const CRISTO_BALL_PLAYOFF_TEAM_POINTS = 10;
 export interface CristoBallPointsBreakdown {
   conferencePoints: Record<string, number>;
   seasonAnswerPoints: Record<string, number>;
+  choicePoints: Record<string, number>;
+  winTotalPoints: Record<string, number>;
   nationalChampPoints: number;
   playoffPoints: number;
 }
@@ -186,6 +221,8 @@ export interface CristoBallEntry {
   seasonYear: number;
   picks: Partial<Record<CristoBallCategoryKey, string>>;
   seasonAnswers: Partial<Record<CristoBallSeasonQuestionKey, boolean | null>>;
+  choicePicks: Partial<Record<CristoBallChoiceQuestionKey, string>>;
+  winTotalPicks: Partial<Record<CristoBallWinTotalKey, CristoBallWinTotalPick>>;
   nationalChampPick: string | null;
   playoffPicks: string[];
   tiebreakerGuess: number | null;
@@ -199,6 +236,8 @@ export const insertCristoBallEntrySchema = z.object({
   seasonYear: z.number().int(),
   picks: z.record(z.string(), z.string()).optional(),
   seasonAnswers: z.record(z.string(), z.boolean().nullable()).optional(),
+  choicePicks: z.record(z.string(), z.string()).optional(),
+  winTotalPicks: z.record(z.string(), z.enum(["over", "under"])).optional(),
   nationalChampPick: z.string().nullable().optional(),
   playoffPicks: z.array(z.string()).max(CRISTO_BALL_PLAYOFF_TEAM_COUNT).optional(),
   tiebreakerGuess: z.number().int().nullable().optional(),
@@ -210,6 +249,8 @@ export interface CristoBallResults {
   seasonYear: number;
   actualPicks: Partial<Record<CristoBallCategoryKey, string>>;
   actualSeasonAnswers: Partial<Record<CristoBallSeasonQuestionKey, boolean | null>>;
+  actualChoicePicks: Partial<Record<CristoBallChoiceQuestionKey, string>>;
+  actualWinTotals: Partial<Record<CristoBallWinTotalKey, number>>;
   actualNationalChamp: string | null;
   actualPlayoffTeams: string[];
   actualTiebreaker: number | null;
@@ -220,6 +261,8 @@ export const insertCristoBallResultsSchema = z.object({
   seasonYear: z.number().int(),
   actualPicks: z.record(z.string(), z.string().nullable()).optional(),
   actualSeasonAnswers: z.record(z.string(), z.boolean().nullable()).optional(),
+  actualChoicePicks: z.record(z.string(), z.string().nullable()).optional(),
+  actualWinTotals: z.record(z.string(), z.number().nullable()).optional(),
   actualNationalChamp: z.string().nullable().optional(),
   actualPlayoffTeams: z.array(z.string()).max(CRISTO_BALL_PLAYOFF_TEAM_COUNT).optional(),
   actualTiebreaker: z.number().int().nullable().optional(),

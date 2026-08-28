@@ -8,6 +8,8 @@ import type {
 import {
   CRISTO_BALL_CATEGORIES,
   CRISTO_BALL_SEASON_QUESTIONS,
+  CRISTO_BALL_CHOICE_QUESTIONS,
+  CRISTO_BALL_WIN_TOTALS,
   CRISTO_BALL_NATIONAL_CHAMP_POINTS,
   CRISTO_BALL_PLAYOFF_TEAM_POINTS,
 } from "@shared/schema";
@@ -203,6 +205,25 @@ export function gradeCristoBallEntry(
     seasonAnswerPoints[q.key] = actual !== null && actual !== undefined && answer === actual ? q.points : 0;
   }
 
+  const choicePoints: Record<string, number> = {};
+  for (const q of CRISTO_BALL_CHOICE_QUESTIONS) {
+    const actual = results.actualChoicePicks?.[q.key];
+    const pick = entry.choicePicks?.[q.key];
+    choicePoints[q.key] = actual && pick && normalizeAnswer(actual) === normalizeAnswer(pick) ? q.points : 0;
+  }
+
+  const winTotalPoints: Record<string, number> = {};
+  for (const w of CRISTO_BALL_WIN_TOTALS) {
+    const actualWins = results.actualWinTotals?.[w.key];
+    const pick = entry.winTotalPicks?.[w.key];
+    if (actualWins === null || actualWins === undefined || !pick) {
+      winTotalPoints[w.key] = 0;
+      continue;
+    }
+    const actualSide: "over" | "under" = actualWins > w.line ? "over" : "under";
+    winTotalPoints[w.key] = pick === actualSide ? w.points : 0;
+  }
+
   const nationalChampPoints =
     results.actualNationalChamp &&
     entry.nationalChampPick &&
@@ -217,6 +238,8 @@ export function gradeCristoBallEntry(
   const breakdown: CristoBallPointsBreakdown = {
     conferencePoints,
     seasonAnswerPoints,
+    choicePoints,
+    winTotalPoints,
     nationalChampPoints,
     playoffPoints,
   };
@@ -224,6 +247,8 @@ export function gradeCristoBallEntry(
   const total =
     Object.values(conferencePoints).reduce((a, b) => a + b, 0) +
     Object.values(seasonAnswerPoints).reduce((a, b) => a + b, 0) +
+    Object.values(choicePoints).reduce((a, b) => a + b, 0) +
+    Object.values(winTotalPoints).reduce((a, b) => a + b, 0) +
     nationalChampPoints +
     playoffPoints;
 

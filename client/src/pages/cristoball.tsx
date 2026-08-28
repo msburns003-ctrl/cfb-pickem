@@ -15,11 +15,15 @@ import { Sparkles, Trophy } from "lucide-react";
 import {
   CRISTO_BALL_CATEGORIES,
   CRISTO_BALL_SEASON_QUESTIONS,
+  CRISTO_BALL_CHOICE_QUESTIONS,
+  CRISTO_BALL_WIN_TOTALS,
   CRISTO_BALL_NATIONAL_CHAMP_POINTS,
   CRISTO_BALL_PLAYOFF_TEAM_COUNT,
   CRISTO_BALL_PLAYOFF_TEAM_POINTS,
   type CristoBallEntry,
 } from "@shared/schema";
+
+const SEASON_QUESTION_POINTS = CRISTO_BALL_SEASON_QUESTIONS[0]?.points ?? 5;
 
 interface CristoBallMeResponse {
   seasonYear: number;
@@ -41,6 +45,8 @@ export default function CristoBallPage() {
 
   const [picks, setPicks] = useState<Record<string, string>>({});
   const [seasonAnswers, setSeasonAnswers] = useState<Record<string, boolean | null>>({});
+  const [choicePicks, setChoicePicks] = useState<Record<string, string>>({});
+  const [winTotalPicks, setWinTotalPicks] = useState<Record<string, "over" | "under">>({});
   const [nationalChampPick, setNationalChampPick] = useState("");
   const [playoffPicks, setPlayoffPicks] = useState<string[]>(emptyPlayoffPicks());
   const [tiebreakerGuess, setTiebreakerGuess] = useState<string>("");
@@ -50,6 +56,8 @@ export default function CristoBallPage() {
     if (data?.entry && !initialized) {
       setPicks(data.entry.picks ?? {});
       setSeasonAnswers(data.entry.seasonAnswers ?? {});
+      setChoicePicks(data.entry.choicePicks ?? {});
+      setWinTotalPicks(data.entry.winTotalPicks ?? {});
       setNationalChampPick(data.entry.nationalChampPick ?? "");
       setPlayoffPicks(emptyPlayoffPicks(data.entry.playoffPicks));
       setTiebreakerGuess(data.entry.tiebreakerGuess != null ? String(data.entry.tiebreakerGuess) : "");
@@ -62,6 +70,8 @@ export default function CristoBallPage() {
       const res = await apiRequest("POST", "/api/cristoball/me", {
         picks,
         seasonAnswers,
+        choicePicks,
+        winTotalPicks,
         nationalChampPick,
         playoffPicks: playoffPicks.map((p) => p.trim()),
         tiebreakerGuess: tiebreakerGuess.trim() === "" ? null : Number(tiebreakerGuess),
@@ -91,9 +101,17 @@ export default function CristoBallPage() {
   const filledCount =
     CRISTO_BALL_CATEGORIES.filter((c) => !!picks[c.key]).length +
     CRISTO_BALL_SEASON_QUESTIONS.filter((q) => seasonAnswers[q.key] !== undefined && seasonAnswers[q.key] !== null).length +
+    CRISTO_BALL_CHOICE_QUESTIONS.filter((q) => !!choicePicks[q.key]).length +
+    CRISTO_BALL_WIN_TOTALS.filter((w) => !!winTotalPicks[w.key]).length +
     (nationalChampPick.trim() ? 1 : 0) +
     playoffPicks.filter((p) => p.trim()).length;
-  const totalFields = CRISTO_BALL_CATEGORIES.length + CRISTO_BALL_SEASON_QUESTIONS.length + 1 + CRISTO_BALL_PLAYOFF_TEAM_COUNT;
+  const totalFields =
+    CRISTO_BALL_CATEGORIES.length +
+    CRISTO_BALL_SEASON_QUESTIONS.length +
+    CRISTO_BALL_CHOICE_QUESTIONS.length +
+    CRISTO_BALL_WIN_TOTALS.length +
+    1 +
+    CRISTO_BALL_PLAYOFF_TEAM_COUNT;
 
   return (
     <div className="flex flex-col gap-6">
@@ -169,7 +187,7 @@ export default function CristoBallPage() {
         <CardHeader>
           <CardTitle className="text-base flex items-center justify-between">
             <span>This season...</span>
-            <Badge variant="outline">10 pts each</Badge>
+            <Badge variant="outline">{SEASON_QUESTION_POINTS} pts each</Badge>
           </CardTitle>
           <CardDescription>Predict whether each of these will happen this season.</CardDescription>
         </CardHeader>
@@ -193,6 +211,74 @@ export default function CristoBallPage() {
                   <RadioGroupItem value="no" id={`${q.key}-no`} data-testid={`radio-${q.key}-no`} />
                   <Label htmlFor={`${q.key}-no`} className="text-sm font-normal cursor-pointer">
                     No
+                  </Label>
+                </div>
+              </RadioGroup>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        {CRISTO_BALL_CHOICE_QUESTIONS.map((q) => (
+          <Card key={q.key}>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center justify-between">
+                <span>{q.label}</span>
+                <Badge variant="outline">{q.points} pts</Badge>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <RadioGroup
+                value={choicePicks[q.key] ?? ""}
+                onValueChange={(v) => setChoicePicks((prev) => ({ ...prev, [q.key]: v }))}
+                disabled={locked}
+                className="flex flex-col gap-2"
+              >
+                {q.options.map((opt) => (
+                  <div key={opt} className="flex items-center gap-2">
+                    <RadioGroupItem value={opt} id={`${q.key}-${opt}`} data-testid={`radio-${q.key}-${opt.replace(/\s+/g, "-").toLowerCase()}`} />
+                    <Label htmlFor={`${q.key}-${opt}`} className="text-sm font-normal cursor-pointer">
+                      {opt}
+                    </Label>
+                  </div>
+                ))}
+              </RadioGroup>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center justify-between">
+            <span>Win Totals</span>
+            <Badge variant="outline">{CRISTO_BALL_WIN_TOTALS[0]?.points ?? 2} pts each</Badge>
+          </CardTitle>
+          <CardDescription>Pick Over or Under each team's season win total.</CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-3">
+          {CRISTO_BALL_WIN_TOTALS.map((w) => (
+            <div key={w.key} className="flex flex-col gap-2 border-b border-border pb-3 last:border-0 last:pb-0 sm:flex-row sm:items-center sm:justify-between">
+              <span className="text-sm">
+                {w.team} <span className="text-muted-foreground">{w.line} wins</span>
+              </span>
+              <RadioGroup
+                value={winTotalPicks[w.key] ?? ""}
+                onValueChange={(v) => setWinTotalPicks((prev) => ({ ...prev, [w.key]: v as "over" | "under" }))}
+                disabled={locked}
+                className="flex gap-4 shrink-0"
+              >
+                <div className="flex items-center gap-1.5">
+                  <RadioGroupItem value="over" id={`${w.key}-over`} data-testid={`radio-${w.key}-over`} />
+                  <Label htmlFor={`${w.key}-over`} className="text-sm font-normal cursor-pointer">
+                    Over
+                  </Label>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <RadioGroupItem value="under" id={`${w.key}-under`} data-testid={`radio-${w.key}-under`} />
+                  <Label htmlFor={`${w.key}-under`} className="text-sm font-normal cursor-pointer">
+                    Under
                   </Label>
                 </div>
               </RadioGroup>
