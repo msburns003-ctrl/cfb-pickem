@@ -11,6 +11,7 @@ import {
   CRISTO_BALL_CHOICE_QUESTIONS,
   CRISTO_BALL_WIN_TOTALS,
   CRISTO_BALL_NATIONAL_CHAMP_POINTS,
+  CRISTO_BALL_HEISMAN_POINTS,
   CRISTO_BALL_PLAYOFF_TEAM_POINTS,
 } from "@shared/schema";
 
@@ -235,6 +236,13 @@ export function gradeCristoBallEntry(
   const playoffMatches = (entry.playoffPicks ?? []).filter((p) => actualPlayoffSet.has(normalizeAnswer(p))).length;
   const playoffPoints = playoffMatches * CRISTO_BALL_PLAYOFF_TEAM_POINTS;
 
+  const heismanPoints =
+    results.actualHeisman &&
+    entry.heismanPick &&
+    normalizeAnswer(results.actualHeisman) === normalizeAnswer(entry.heismanPick)
+      ? CRISTO_BALL_HEISMAN_POINTS
+      : 0;
+
   const breakdown: CristoBallPointsBreakdown = {
     conferencePoints,
     seasonAnswerPoints,
@@ -242,6 +250,7 @@ export function gradeCristoBallEntry(
     winTotalPoints,
     nationalChampPoints,
     playoffPoints,
+    heismanPoints,
   };
 
   const total =
@@ -250,7 +259,8 @@ export function gradeCristoBallEntry(
     Object.values(choicePoints).reduce((a, b) => a + b, 0) +
     Object.values(winTotalPoints).reduce((a, b) => a + b, 0) +
     nationalChampPoints +
-    playoffPoints;
+    playoffPoints +
+    heismanPoints;
 
   return { total, breakdown };
 }

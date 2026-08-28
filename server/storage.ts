@@ -368,7 +368,7 @@ export class DatabaseStorage implements IStorage {
         winTotalPicks: entry.winTotalPicks ?? existing.winTotalPicks,
         nationalChampPick: entry.nationalChampPick ?? existing.nationalChampPick,
         playoffPicks: entry.playoffPicks ?? existing.playoffPicks,
-        tiebreakerGuess: entry.tiebreakerGuess ?? existing.tiebreakerGuess,
+        heismanPick: entry.heismanPick ?? existing.heismanPick,
         updatedAt: now,
       });
       const { data, error } = await supabase
@@ -389,7 +389,7 @@ export class DatabaseStorage implements IStorage {
       winTotalPicks: entry.winTotalPicks ?? {},
       nationalChampPick: entry.nationalChampPick ?? null,
       playoffPicks: entry.playoffPicks ?? [],
-      tiebreakerGuess: entry.tiebreakerGuess ?? null,
+      heismanPick: entry.heismanPick ?? null,
       submittedAt: now,
       updatedAt: now,
     });
@@ -427,7 +427,7 @@ export class DatabaseStorage implements IStorage {
         actualWinTotals: results.actualWinTotals ?? existing.actualWinTotals,
         actualNationalChamp: results.actualNationalChamp ?? existing.actualNationalChamp,
         actualPlayoffTeams: results.actualPlayoffTeams ?? existing.actualPlayoffTeams,
-        actualTiebreaker: results.actualTiebreaker ?? existing.actualTiebreaker,
+        actualHeisman: results.actualHeisman ?? existing.actualHeisman,
       });
       const { data, error } = await supabase
         .from("cristo_ball_results")
@@ -446,7 +446,7 @@ export class DatabaseStorage implements IStorage {
       actualWinTotals: results.actualWinTotals ?? {},
       actualNationalChamp: results.actualNationalChamp ?? null,
       actualPlayoffTeams: results.actualPlayoffTeams ?? [],
-      actualTiebreaker: results.actualTiebreaker ?? null,
+      actualHeisman: results.actualHeisman ?? null,
     });
     const { data, error } = await supabase.from("cristo_ball_results").insert(payload).select().single();
     assertNoError(error, "upsertCristoBallResults(insert)");

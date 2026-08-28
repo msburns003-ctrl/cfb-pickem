@@ -27,6 +27,7 @@ import {
   CRISTO_BALL_CHOICE_QUESTIONS,
   CRISTO_BALL_WIN_TOTALS,
   CRISTO_BALL_PLAYOFF_TEAM_COUNT,
+  CRISTO_BALL_HEISMAN_POINTS,
   type CristoBallEntry,
   type CristoBallResults,
 } from "@shared/schema";
@@ -59,7 +60,7 @@ export default function AdminCristoBallPage() {
   const [actualWinTotals, setActualWinTotals] = useState<Record<string, string>>({});
   const [actualNationalChamp, setActualNationalChamp] = useState("");
   const [actualPlayoffTeams, setActualPlayoffTeams] = useState<string[]>(emptyPlayoffTeams());
-  const [actualTiebreaker, setActualTiebreaker] = useState("");
+  const [actualHeisman, setActualHeisman] = useState("");
   const [initialized, setInitialized] = useState(false);
 
   useEffect(() => {
@@ -73,7 +74,7 @@ export default function AdminCristoBallPage() {
       );
       setActualNationalChamp(data.results.actualNationalChamp ?? "");
       setActualPlayoffTeams(emptyPlayoffTeams(data.results.actualPlayoffTeams));
-      setActualTiebreaker(data.results.actualTiebreaker != null ? String(data.results.actualTiebreaker) : "");
+      setActualHeisman(data.results.actualHeisman ?? "");
       setInitialized(true);
     }
   }, [data, initialized]);
@@ -91,7 +92,7 @@ export default function AdminCristoBallPage() {
         ),
         actualNationalChamp,
         actualPlayoffTeams: actualPlayoffTeams.map((t) => t.trim()),
-        actualTiebreaker: actualTiebreaker.trim() === "" ? null : Number(actualTiebreaker),
+        actualHeisman,
       });
       return res.json();
     },
@@ -331,17 +332,15 @@ export default function AdminCristoBallPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Actual tiebreaker</CardTitle>
-          <CardDescription>Combined points scored, UMass @ Akron (Nov 18) — for reference, not worth points.</CardDescription>
+          <CardTitle className="text-base">Actual Heisman Trophy winner</CardTitle>
+          <CardDescription>Worth {CRISTO_BALL_HEISMAN_POINTS} {(Number(CRISTO_BALL_HEISMAN_POINTS) === 1 ? "pt" : "pts")}.</CardDescription>
         </CardHeader>
         <CardContent>
           <Input
-            type="number"
-            value={actualTiebreaker}
-            onChange={(e) => setActualTiebreaker(e.target.value)}
-            placeholder="e.g. 54"
-            className="max-w-40"
-            data-testid="input-actual-tiebreaker"
+            value={actualHeisman}
+            onChange={(e) => setActualHeisman(e.target.value)}
+            placeholder="Player name"
+            data-testid="input-actual-heisman"
           />
         </CardContent>
       </Card>

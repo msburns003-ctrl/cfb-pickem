@@ -205,6 +205,7 @@ export type CristoBallWinTotalPick = "over" | "under";
 export const CRISTO_BALL_NATIONAL_CHAMP_POINTS = 5;
 export const CRISTO_BALL_PLAYOFF_TEAM_COUNT = 4;
 export const CRISTO_BALL_PLAYOFF_TEAM_POINTS = 2;
+export const CRISTO_BALL_HEISMAN_POINTS = 3;
 
 export interface CristoBallPointsBreakdown {
   conferencePoints: Record<string, number>;
@@ -213,6 +214,7 @@ export interface CristoBallPointsBreakdown {
   winTotalPoints: Record<string, number>;
   nationalChampPoints: number;
   playoffPoints: number;
+  heismanPoints: number;
 }
 
 export interface CristoBallEntry {
@@ -225,7 +227,7 @@ export interface CristoBallEntry {
   winTotalPicks: Partial<Record<CristoBallWinTotalKey, CristoBallWinTotalPick>>;
   nationalChampPick: string | null;
   playoffPicks: string[];
-  tiebreakerGuess: number | null;
+  heismanPick: string | null;
   pointsEarned: number | null;
   pointsBreakdown: CristoBallPointsBreakdown | null;
   submittedAt: string;
@@ -240,7 +242,7 @@ export const insertCristoBallEntrySchema = z.object({
   winTotalPicks: z.record(z.string(), z.enum(["over", "under"])).optional(),
   nationalChampPick: z.string().nullable().optional(),
   playoffPicks: z.array(z.string()).max(CRISTO_BALL_PLAYOFF_TEAM_COUNT).optional(),
-  tiebreakerGuess: z.number().int().nullable().optional(),
+  heismanPick: z.string().nullable().optional(),
 });
 export type InsertCristoBallEntry = z.infer<typeof insertCristoBallEntrySchema>;
 
@@ -253,7 +255,7 @@ export interface CristoBallResults {
   actualWinTotals: Partial<Record<CristoBallWinTotalKey, number>>;
   actualNationalChamp: string | null;
   actualPlayoffTeams: string[];
-  actualTiebreaker: number | null;
+  actualHeisman: string | null;
   gradedAt: string | null;
 }
 
@@ -265,6 +267,6 @@ export const insertCristoBallResultsSchema = z.object({
   actualWinTotals: z.record(z.string(), z.number().nullable()).optional(),
   actualNationalChamp: z.string().nullable().optional(),
   actualPlayoffTeams: z.array(z.string()).max(CRISTO_BALL_PLAYOFF_TEAM_COUNT).optional(),
-  actualTiebreaker: z.number().int().nullable().optional(),
+  actualHeisman: z.string().nullable().optional(),
 });
 export type InsertCristoBallResults = z.infer<typeof insertCristoBallResultsSchema>;

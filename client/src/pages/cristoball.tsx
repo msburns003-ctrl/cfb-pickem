@@ -20,6 +20,7 @@ import {
   CRISTO_BALL_NATIONAL_CHAMP_POINTS,
   CRISTO_BALL_PLAYOFF_TEAM_COUNT,
   CRISTO_BALL_PLAYOFF_TEAM_POINTS,
+  CRISTO_BALL_HEISMAN_POINTS,
   type CristoBallEntry,
 } from "@shared/schema";
 
@@ -54,7 +55,7 @@ export default function CristoBallPage() {
   const [winTotalPicks, setWinTotalPicks] = useState<Record<string, "over" | "under">>({});
   const [nationalChampPick, setNationalChampPick] = useState("");
   const [playoffPicks, setPlayoffPicks] = useState<string[]>(emptyPlayoffPicks());
-  const [tiebreakerGuess, setTiebreakerGuess] = useState<string>("");
+  const [heismanPick, setHeismanPick] = useState("");
   const [initialized, setInitialized] = useState(false);
 
   useEffect(() => {
@@ -65,7 +66,7 @@ export default function CristoBallPage() {
       setWinTotalPicks(data.entry.winTotalPicks ?? {});
       setNationalChampPick(data.entry.nationalChampPick ?? "");
       setPlayoffPicks(emptyPlayoffPicks(data.entry.playoffPicks));
-      setTiebreakerGuess(data.entry.tiebreakerGuess != null ? String(data.entry.tiebreakerGuess) : "");
+      setHeismanPick(data.entry.heismanPick ?? "");
       setInitialized(true);
     }
   }, [data, initialized]);
@@ -79,7 +80,7 @@ export default function CristoBallPage() {
         winTotalPicks,
         nationalChampPick,
         playoffPicks: playoffPicks.map((p) => p.trim()),
-        tiebreakerGuess: tiebreakerGuess.trim() === "" ? null : Number(tiebreakerGuess),
+        heismanPick,
       });
       return res.json();
     },
@@ -109,14 +110,16 @@ export default function CristoBallPage() {
     CRISTO_BALL_CHOICE_QUESTIONS.filter((q) => !!choicePicks[q.key]).length +
     CRISTO_BALL_WIN_TOTALS.filter((w) => !!winTotalPicks[w.key]).length +
     (nationalChampPick.trim() ? 1 : 0) +
-    playoffPicks.filter((p) => p.trim()).length;
+    playoffPicks.filter((p) => p.trim()).length +
+    (heismanPick.trim() ? 1 : 0);
   const totalFields =
     CRISTO_BALL_CATEGORIES.length +
     CRISTO_BALL_SEASON_QUESTIONS.length +
     CRISTO_BALL_CHOICE_QUESTIONS.length +
     CRISTO_BALL_WIN_TOTALS.length +
     1 +
-    CRISTO_BALL_PLAYOFF_TEAM_COUNT;
+    CRISTO_BALL_PLAYOFF_TEAM_COUNT +
+    1;
 
   return (
     <div className="flex flex-col gap-6">
@@ -338,18 +341,18 @@ export default function CristoBallPage() {
 
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base">Tiebreaker</CardTitle>
-          <CardDescription>Total combined points scored in the UMass @ Akron game on November 18th.</CardDescription>
+          <CardTitle className="text-base flex items-center justify-between">
+            <span>2026 Heisman Trophy Winner</span>
+            <Badge variant="outline">{ptsLabel(CRISTO_BALL_HEISMAN_POINTS)}</Badge>
+          </CardTitle>
         </CardHeader>
         <CardContent>
           <Input
-            type="number"
-            value={tiebreakerGuess}
-            onChange={(e) => setTiebreakerGuess(e.target.value)}
+            value={heismanPick}
+            onChange={(e) => setHeismanPick(e.target.value)}
             disabled={locked}
-            placeholder="e.g. 54"
-            className="max-w-40"
-            data-testid="input-tiebreaker"
+            placeholder="Player name"
+            data-testid="input-heisman"
           />
         </CardContent>
       </Card>
