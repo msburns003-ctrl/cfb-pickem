@@ -120,6 +120,61 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json({ pick });
   });
 
+  // Saves several picks for this week in one request. The picks page stages
+  // selections locally as the member clicks around and only calls this once
+  // they hit "Save picks" — so a member flipping between teams a few times
+  // doesn't fire a network request per click, and this remains a single
+  // request no matter how many games they changed.
+  //
+  // Each entry is validated the same way as the single-pick route above, but
+  // independently: a bad entry (game not in this slate, team not playing,
+  // that specific game's kickoff already passed) is skipped and reported
+  // rather than failing the whole batch, since the rest may still be valid.
+  app.post("/api/weeks/:id/picks/batch", requireAuth, async (req, res) => {
+    const weekId = Number(req.params.id);
+    const week = await storage.getWeek(weekId);
+    if (!week) return res.status(404).json({ message: "Week not found" });
+
+    const schema = z.object({
+      picks: z.array(z.object({ gameId: z.number(), selectedTeam: z.string().min(1) })).min(1).max(100),
+    });
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: "picks must be a non-empty array of {gameId, selectedTeam}" });
+
+    if (week.status !== "open" || Date.now() >= new Date(week.pickDeadline).getTime()) {
+      return res.status(403).json({ message: "Picks are locked for this week" });
+    }
+
+    const saved: { gameId: number; selectedTeam: string }[] = [];
+    const skipped: { gameId: number; message: string }[] = [];
+    const now = Date.now();
+
+    for (const entry of parsed.data.picks) {
+      const game = await storage.getGame(entry.gameId);
+      if (!game || game.weekId !== weekId || !game.isSelected) {
+        skipped.push({ gameId: entry.gameId, message: "Not part of this week's slate" });
+        continue;
+      }
+      if (![game.awayTeam, game.homeTeam].includes(entry.selectedTeam)) {
+        skipped.push({ gameId: entry.gameId, message: "Not one of the two teams playing" });
+        continue;
+      }
+      if (now >= new Date(game.kickoff).getTime()) {
+        skipped.push({ gameId: entry.gameId, message: "Kickoff already passed" });
+        continue;
+      }
+      await storage.upsertPick({
+        gameId: game.id,
+        userId: req.user!.id,
+        selectedTeam: entry.selectedTeam,
+        submittedAt: new Date().toISOString(),
+      });
+      saved.push({ gameId: game.id, selectedTeam: entry.selectedTeam });
+    }
+
+    res.json({ saved, skipped });
+  });
+
   app.post("/api/weeks/:id/upset-pick", requireAuth, async (req, res) => {
     const weekId = Number(req.params.id);
     const week = await storage.getWeek(weekId);

@@ -1,16 +1,17 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
+import { cn } from "@/lib/utils";
 import { Link } from "wouter";
 import { GameCard } from "@/components/GameCard";
 import { UpsetPickPanel } from "@/components/UpsetPickPanel";
 import { CountdownTimer } from "@/components/CountdownTimer";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { useState } from "react";
 import { formatEastern } from "@/lib/time";
-import { Sparkles, ArrowRight } from "lucide-react";
+import { Sparkles, ArrowRight, Save } from "lucide-react";
 import type { Game, Pick, UpsetPick, Week } from "@shared/schema";
 
 interface DashboardResponse {
@@ -41,16 +42,48 @@ export default function DashboardPage() {
     enabled: !!activeWeekId,
   });
 
-  const pickMutation = useMutation({
-    mutationFn: async ({ gameId, selectedTeam }: { gameId: number; selectedTeam: string }) => {
-      const res = await apiRequest("POST", `/api/weeks/${activeWeekId}/picks`, { gameId, selectedTeam });
-      return res.json();
+  // Selecting a team only updates this local map — nothing hits the network
+  // until the member presses "Save picks". Keyed by gameId so switching back
+  // and forth is free, and only the final choice for each game gets sent.
+  const [localPicks, setLocalPicks] = useState<Map<number, string>>(new Map());
+
+  useEffect(() => {
+    setLocalPicks(new Map());
+  }, [activeWeekId]);
+
+  const batchSaveMutation = useMutation({
+    mutationFn: async (picks: { gameId: number; selectedTeam: string }[]) => {
+      const res = await apiRequest("POST", `/api/weeks/${activeWeekId}/picks/batch`, { picks });
+      return (await res.json()) as {
+        saved: { gameId: number; selectedTeam: string }[];
+        skipped: { gameId: number; message: string }[];
+      };
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: [`/api/weeks/${activeWeekId}/dashboard`] });
+      setLocalPicks((prev) => {
+        const next = new Map(prev);
+        result.saved.forEach((s) => next.delete(s.gameId));
+        return next;
+      });
+      if (result.skipped.length > 0) {
+        const detail = result.skipped
+          .map((s) => {
+            const game = data?.games.find((g) => g.id === s.gameId);
+            return `${game ? `${game.awayTeam} @ ${game.homeTeam}` : `Game ${s.gameId}`}: ${s.message}`;
+          })
+          .join("; ");
+        toast({
+          title: `Saved ${result.saved.length}, ${result.skipped.length} couldn't save`,
+          description: detail,
+          variant: "destructive",
+        });
+      } else if (result.saved.length > 0) {
+        toast({ title: `Saved ${result.saved.length} pick${result.saved.length === 1 ? "" : "s"}` });
+      }
     },
     onError: (err) => {
-      toast({ title: "Couldn't save pick", description: err instanceof Error ? err.message : undefined, variant: "destructive" });
+      toast({ title: "Couldn't save picks", description: err instanceof Error ? err.message : undefined, variant: "destructive" });
     },
   });
 
@@ -74,8 +107,39 @@ export default function DashboardPage() {
     return map;
   }, [data]);
 
+  const unsavedGameIds = useMemo(
+    () =>
+      Array.from(localPicks.entries())
+        .filter(([gameId, team]) => picksByGame.get(gameId)?.selectedTeam !== team)
+        .map(([gameId]) => gameId),
+    [localPicks, picksByGame],
+  );
+  const unsavedCount = unsavedGameIds.length;
+
+  useEffect(() => {
+    if (unsavedCount === 0) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [unsavedCount]);
+
   const submittedCount = data?.myPicks.length ?? 0;
   const totalGames = data?.games.length ?? 0;
+
+  const handleWeekChange = (weekId: number) => {
+    if (unsavedCount > 0 && !window.confirm("You have unsaved picks for this week. Switch weeks and discard them?")) {
+      return;
+    }
+    setSelectedWeekId(weekId);
+  };
+
+  const handleSavePicks = () => {
+    const picks = unsavedGameIds.map((gameId) => ({ gameId, selectedTeam: localPicks.get(gameId)! }));
+    if (picks.length > 0) batchSaveMutation.mutate(picks);
+  };
 
   if (!weeks.length) {
     return (
@@ -86,7 +150,7 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className={cn("flex flex-col gap-6", unsavedCount > 0 && "pb-20")}>
       <Link
         href="/cristoball"
         className="flex items-center justify-between gap-3 rounded-lg border border-accent/30 bg-accent/10 px-4 py-3 text-sm transition-colors hover:bg-accent/20"
@@ -108,7 +172,8 @@ export default function DashboardPage() {
           </h1>
           {data && (
             <p className="text-sm text-muted-foreground">
-              {submittedCount}/{totalGames} picks submitted
+              {submittedCount}/{totalGames} picks saved
+              {unsavedCount > 0 && <span className="font-medium text-accent"> · {unsavedCount} unsaved</span>}
               {data.myUpsetPick ? " · underdog pick in" : " · underdog pick still open"}
             </p>
           )}
@@ -123,7 +188,7 @@ export default function DashboardPage() {
             </div>
           )}
           {weeks.length > 1 && (
-            <Select value={String(activeWeekId ?? "")} onValueChange={(v) => setSelectedWeekId(Number(v))}>
+            <Select value={String(activeWeekId ?? "")} onValueChange={(v) => handleWeekChange(Number(v))}>
               <SelectTrigger className="w-40" data-testid="select-week">
                 <SelectValue placeholder="Select week" />
               </SelectTrigger>
@@ -153,17 +218,40 @@ export default function DashboardPage() {
             </p>
           )}
           <div className="flex flex-col gap-3">
-            {data.games.map((game) => (
-              <GameCard
-                key={game.id}
-                game={game}
-                pick={picksByGame.get(game.id)}
-                locked={data.locked}
-                submitting={pickMutation.isPending}
-                onPick={(team) => pickMutation.mutate({ gameId: game.id, selectedTeam: team })}
-              />
-            ))}
+            {data.games.map((game) => {
+              const selectedTeam = localPicks.get(game.id) ?? picksByGame.get(game.id)?.selectedTeam ?? null;
+              return (
+                <GameCard
+                  key={game.id}
+                  game={game}
+                  pick={picksByGame.get(game.id)}
+                  selectedTeam={selectedTeam}
+                  unsaved={unsavedGameIds.includes(game.id)}
+                  locked={data.locked}
+                  onSelect={(team) => setLocalPicks((prev) => new Map(prev).set(game.id, team))}
+                />
+              );
+            })}
           </div>
+
+          {unsavedCount > 0 && (
+            <div
+              className="fixed inset-x-4 bottom-4 z-50 flex items-center justify-between gap-3 rounded-lg border border-card-border bg-card p-3 shadow-lg sm:inset-x-auto sm:right-6 sm:w-96"
+              data-testid="bar-save-picks"
+            >
+              <span className="text-sm font-medium">
+                {unsavedCount} pick{unsavedCount === 1 ? "" : "s"} not saved yet
+              </span>
+              <Button
+                onClick={handleSavePicks}
+                disabled={batchSaveMutation.isPending}
+                data-testid="button-save-picks"
+              >
+                <Save className="h-4 w-4" />
+                {batchSaveMutation.isPending ? "Saving..." : "Save picks"}
+              </Button>
+            </div>
+          )}
 
           <UpsetPickPanel
             availableGames={data.availableForUpset}

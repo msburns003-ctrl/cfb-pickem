@@ -16,12 +16,13 @@ function formatKickoff(iso: string) {
 interface GameCardProps {
   game: Game;
   pick?: Pick | null;
+  selectedTeam?: string | null;
+  unsaved?: boolean;
   locked: boolean;
-  onPick?: (selectedTeam: string) => void;
-  submitting?: boolean;
+  onSelect?: (selectedTeam: string) => void;
 }
 
-export function GameCard({ game, pick, locked, onPick, submitting }: GameCardProps) {
+export function GameCard({ game, pick, selectedTeam, unsaved, locked, onSelect }: GameCardProps) {
   const isFavoriteAway = game.favoriteTeam === game.awayTeam;
   // Always show the spread as reference info, even for straight-up games —
   // it just isn't the basis for grading unless pickType is "ATS".
@@ -56,15 +57,14 @@ export function GameCard({ game, pick, locked, onPick, submitting }: GameCardPro
           { team: game.awayTeam, rank: game.awayRank, line: awayLine },
           { team: game.homeTeam, rank: game.homeRank, line: homeLine },
         ].map(({ team, rank, line }) => {
-          const selected = pick?.selectedTeam === team;
-          const isWinner = graded && game.winner === team;
+          const selected = selectedTeam === team;
           return (
             <Button
               key={team}
               type="button"
               variant={selected ? "default" : "outline"}
-              disabled={locked || submitting}
-              onClick={() => onPick?.(team)}
+              disabled={locked}
+              onClick={() => onSelect?.(team)}
               className={cn(
                 "h-auto flex-col items-center gap-0.5 py-3 whitespace-normal text-center",
                 graded && selected && pick?.isCorrect && "ring-2 ring-primary",
@@ -97,8 +97,10 @@ export function GameCard({ game, pick, locked, onPick, submitting }: GameCardPro
         </div>
       )}
 
-      {!graded && pick && (
-        <p className="mt-3 text-xs text-muted-foreground">You picked {pick.selectedTeam}.</p>
+      {!graded && selectedTeam && (
+        <p className={cn("mt-3 text-xs", unsaved ? "font-medium text-accent" : "text-muted-foreground")}>
+          {unsaved ? `${selectedTeam} selected \u2014 not saved yet` : `You picked ${selectedTeam}.`}
+        </p>
       )}
     </div>
   );
