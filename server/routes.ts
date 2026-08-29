@@ -16,10 +16,12 @@ import {
 import { insertWeekSchema, type InsertWeek, insertCristoBallEntrySchema, insertCristoBallResultsSchema } from "@shared/schema";
 import { checkGamesForWeek } from "./scores";
 import { z } from "zod";
+import { authLimiter, pickWriteLimiter, readLimiter, adminLimiter } from "./rateLimit";
 
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
   // ---------------- AUTH ----------------
-  app.post("/api/auth/login", async (req, res) => {
+  // Rate limit: strict IP-based (5 attempts per 15 min, successful logins skipped)
+  app.post("/api/auth/login", authLimiter, async (req, res) => {
     const schema = z.object({ email: z.string().email(), password: z.string().min(1) });
     const parsed = schema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: "Email and password are required" });
@@ -39,11 +41,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json({ ok: true });
   });
 
-  app.get("/api/auth/me", requireAuth, async (req, res) => {
+  app.get("/api/auth/me", readLimiter, requireAuth, async (req, res) => {
     res.json({ user: toPublicUser(req.user!) });
   });
 
-  app.post("/api/auth/change-password", requireAuth, async (req, res) => {
+  // Rate limit: strict, same bucket as login attempts
+  app.post("/api/auth/change-password", authLimiter, requireAuth, async (req, res) => {
     const schema = z.object({ currentPassword: z.string().min(1), newPassword: z.string().min(6) });
     const parsed = schema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: "New password must be at least 6 characters" });
@@ -58,12 +61,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   // ---------------- MEMBER-FACING WEEKS/PICKS ----------------
-  app.get("/api/weeks", requireAuth, async (_req, res) => {
+  app.get("/api/weeks", readLimiter, requireAuth, async (_req, res) => {
     const weeks = await storage.listWeeks();
     res.json({ weeks });
   });
 
-  app.get("/api/weeks/:id/dashboard", requireAuth, async (req, res) => {
+  app.get("/api/weeks/:id/dashboard", readLimiter, requireAuth, async (req, res) => {
     const weekId = Number(req.params.id);
     const week = await storage.getWeek(weekId);
     if (!week) return res.status(404).json({ message: "Week not found" });
@@ -89,7 +92,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     });
   });
 
-  app.post("/api/weeks/:id/picks", requireAuth, async (req, res) => {
+  // Rate limit: 40/min per user — allows editing all weekly games rapidly
+  app.post("/api/weeks/:id/picks", pickWriteLimiter, requireAuth, async (req, res) => {
     const weekId = Number(req.params.id);
     const week = await storage.getWeek(weekId);
     if (!week) return res.status(404).json({ message: "Week not found" });
@@ -130,7 +134,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // independently: a bad entry (game not in this slate, team not playing,
   // that specific game's kickoff already passed) is skipped and reported
   // rather than failing the whole batch, since the rest may still be valid.
-  app.post("/api/weeks/:id/picks/batch", requireAuth, async (req, res) => {
+  app.post("/api/weeks/:id/picks/batch", pickWriteLimiter, requireAuth, async (req, res) => {
     const weekId = Number(req.params.id);
     const week = await storage.getWeek(weekId);
     if (!week) return res.status(404).json({ message: "Week not found" });
@@ -175,7 +179,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json({ saved, skipped });
   });
 
-  app.post("/api/weeks/:id/upset-pick", requireAuth, async (req, res) => {
+  app.post("/api/weeks/:id/upset-pick", pickWriteLimiter, requireAuth, async (req, res) => {
     const weekId = Number(req.params.id);
     const week = await storage.getWeek(weekId);
     if (!week) return res.status(404).json({ message: "Week not found" });
@@ -212,7 +216,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   // ---------------- STANDINGS ----------------
-  app.get("/api/standings", requireAuth, async (_req, res) => {
+  app.get("/api/standings", readLimiter, requireAuth, async (_req, res) => {
     const rows = await computeStandings();
     const weeks = await storage.listWeeks();
     const gradedWeeks = weeks.filter((w) => w.status === "graded").sort((a, b) => a.weekNumber - b.weekNumber);
@@ -232,7 +236,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   // ---------------- CRISTO-BALL ----------------
-  app.get("/api/cristoball/me", requireAuth, async (req, res) => {
+  app.get("/api/cristoball/me", readLimiter, requireAuth, async (req, res) => {
     const seasonYear = await getCurrentSeasonYear();
     const [entry, lockDeadline] = await Promise.all([
       storage.getCristoBallEntry(req.user!.id, seasonYear),
@@ -242,7 +246,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json({ seasonYear, entry: entry ?? null, locked, lockDeadline });
   });
 
-  app.post("/api/cristoball/me", requireAuth, async (req, res) => {
+  app.post("/api/cristoball/me", pickWriteLimiter, requireAuth, async (req, res) => {
     const seasonYear = await getCurrentSeasonYear();
     const lockDeadline = await getCristoBallLockDeadline(seasonYear);
     const locked = lockDeadline != null && Date.now() >= new Date(lockDeadline).getTime();
@@ -254,6 +258,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const entry = await storage.upsertCristoBallEntry({ ...parsed.data, userId: req.user!.id });
     res.json({ entry });
   });
+
+  // ---------------- ADMIN RATE LIMIT ----------------
+  // Blanket admin-limiter for every /api/admin/* route below. Mounted here
+  // (rather than at the top of registerRoutes) so it doesn't accidentally
+  // intercept any future non-admin routes. requireAdmin still runs per-route
+  // so a non-admin gets 403 rather than being silently rate-limited.
+  app.use("/api/admin", adminLimiter);
 
   app.get("/api/admin/cristoball", requireAdmin, async (_req, res) => {
     const seasonYear = await getCurrentSeasonYear();
@@ -303,7 +314,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   // ---------------- PICKS GRID ----------------
-  app.get("/api/weeks/:id/grid", requireAuth, async (req, res) => {
+  app.get("/api/weeks/:id/grid", readLimiter, requireAuth, async (req, res) => {
     const weekId = Number(req.params.id);
     const week = await storage.getWeek(weekId);
     if (!week) return res.status(404).json({ message: "Week not found" });
