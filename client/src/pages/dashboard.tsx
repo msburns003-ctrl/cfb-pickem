@@ -59,13 +59,56 @@ export default function DashboardPage() {
         skipped: { gameId: number; message: string }[];
       };
     },
-    onSuccess: (result) => {
-      queryClient.invalidateQueries({ queryKey: [`/api/weeks/${activeWeekId}/dashboard`] });
+    // Optimistic update: patch the dashboard cache immediately with the
+    // picks the user just submitted, so the UI reflects them without
+    // waiting for the network roundtrip. If the request fails, roll back
+    // to the snapshot taken before the mutation.
+    onMutate: async (picks) => {
+      const dashKey = [`/api/weeks/${activeWeekId}/dashboard`];
+      // Cancel any in-flight refetch so it can't overwrite our optimistic patch.
+      await queryClient.cancelQueries({ queryKey: dashKey });
+      const previous = queryClient.getQueryData<DashboardResponse>(dashKey);
+      if (previous) {
+        const nowIso = new Date().toISOString();
+        const nextMyPicks = [...previous.myPicks];
+        for (const p of picks) {
+          const idx = nextMyPicks.findIndex((x) => x.gameId === p.gameId);
+          if (idx >= 0) {
+            nextMyPicks[idx] = { ...nextMyPicks[idx], selectedTeam: p.selectedTeam, submittedAt: nowIso };
+          } else {
+            // Insert a placeholder Pick. id/isCorrect/pointsEarned are unknown
+            // until the server responds — the invalidateQueries in
+            // onSettled below will reconcile with the real row.
+            nextMyPicks.push({
+              id: -Date.now() - p.gameId, // temporary negative id, replaced on refetch
+              gameId: p.gameId,
+              userId: previous.myPicks[0]?.userId ?? 0,
+              selectedTeam: p.selectedTeam,
+              isCorrect: null,
+              pointsEarned: null,
+              submittedAt: nowIso,
+            });
+          }
+        }
+        queryClient.setQueryData<DashboardResponse>(dashKey, {
+          ...previous,
+          myPicks: nextMyPicks,
+        });
+      }
+      // Clear the staging map optimistically too so the "Save picks" button
+      // returns to its idle state immediately.
+      const stagedSnapshot = new Map(localPicks);
       setLocalPicks((prev) => {
         const next = new Map(prev);
-        result.saved.forEach((s) => next.delete(s.gameId));
+        picks.forEach((p) => next.delete(p.gameId));
         return next;
       });
+      return { previous, stagedSnapshot };
+    },
+    onSuccess: (result) => {
+      // Any picks the server rejected need to be re-staged so the user can
+      // fix and retry. Everything else stays as we already optimistically
+      // applied it.
       if (result.skipped.length > 0) {
         const detail = result.skipped
           .map((s) => {
@@ -82,8 +125,21 @@ export default function DashboardPage() {
         toast({ title: `Saved ${result.saved.length} pick${result.saved.length === 1 ? "" : "s"}` });
       }
     },
-    onError: (err) => {
+    onError: (err, _picks, ctx) => {
+      // Roll back both the dashboard cache and the staging map so the user
+      // sees exactly what they had before the failed submit.
+      if (ctx?.previous) {
+        queryClient.setQueryData([`/api/weeks/${activeWeekId}/dashboard`], ctx.previous);
+      }
+      if (ctx?.stagedSnapshot) {
+        setLocalPicks(ctx.stagedSnapshot);
+      }
       toast({ title: "Couldn't save picks", description: err instanceof Error ? err.message : undefined, variant: "destructive" });
+    },
+    // Always reconcile with the server — replaces our optimistic placeholders
+    // (including any temporary negative ids) with the real rows.
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/weeks/${activeWeekId}/dashboard`] });
     },
   });
 
@@ -92,12 +148,49 @@ export default function DashboardPage() {
       const res = await apiRequest("POST", `/api/weeks/${activeWeekId}/upset-pick`, { gameId });
       return res.json();
     },
+    // Optimistic upset pick: mark the chosen game as the user's underdog
+    // pick in the dashboard cache immediately so the UI updates without
+    // waiting for the network. Rolls back on error.
+    onMutate: async (gameId) => {
+      const dashKey = [`/api/weeks/${activeWeekId}/dashboard`];
+      await queryClient.cancelQueries({ queryKey: dashKey });
+      const previous = queryClient.getQueryData<DashboardResponse>(dashKey);
+      if (previous) {
+        const game = previous.availableForUpset.find((g) => g.id === gameId);
+        if (game) {
+          const underdogTeam =
+            game.favoriteTeam === game.awayTeam ? game.homeTeam : game.awayTeam;
+          const optimistic: UpsetPick = {
+            id: -Date.now(),
+            userId: previous.myPicks[0]?.userId ?? 0,
+            weekId: activeWeekId!,
+            gameId: game.id,
+            underdogTeam,
+            favoriteTeam: game.favoriteTeam,
+            spread: game.spread,
+            result: "pending",
+            pointsEarned: 0,
+            submittedAt: new Date().toISOString(),
+          };
+          queryClient.setQueryData<DashboardResponse>(dashKey, {
+            ...previous,
+            myUpsetPick: optimistic,
+          });
+        }
+      }
+      return { previous };
+    },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [`/api/weeks/${activeWeekId}/dashboard`] });
       toast({ title: "Underdog pick locked in" });
     },
-    onError: (err) => {
+    onError: (err, _gameId, ctx) => {
+      if (ctx?.previous) {
+        queryClient.setQueryData([`/api/weeks/${activeWeekId}/dashboard`], ctx.previous);
+      }
       toast({ title: "Couldn't save pick", description: err instanceof Error ? err.message : undefined, variant: "destructive" });
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/weeks/${activeWeekId}/dashboard`] });
     },
   });
 
