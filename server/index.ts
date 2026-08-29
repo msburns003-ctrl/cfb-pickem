@@ -4,9 +4,16 @@ import type { Request } from 'express';
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "node:http";
+import { globalLimiter } from "./rateLimit";
 
 const app = express();
 const httpServer = createServer(app);
+
+// REQUIRED for rate limiting to work correctly: the *.pplx.app hosting
+// proxy sits in front of this server, so without trust proxy, every
+// request would appear to come from the proxy's IP and all users would
+// share one rate-limit bucket. Value 1 = trust the single proxy hop.
+app.set("trust proxy", 1);
 
 declare module "http" {
   interface IncomingMessage {
@@ -23,6 +30,11 @@ app.use(
 );
 
 app.use(express.urlencoded({ extended: false }));
+
+// Global rate-limit fallback for all /api/* traffic. Route-specific
+// limiters are applied in routes.ts on top of this baseline.
+// Admins are exempted (see rateLimit.ts).
+app.use("/api", globalLimiter);
 
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
