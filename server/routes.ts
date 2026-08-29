@@ -16,6 +16,7 @@ import {
 import { insertWeekSchema, type InsertWeek, insertCristoBallEntrySchema, insertCristoBallResultsSchema } from "@shared/schema";
 import { checkGamesForWeek } from "./scores";
 import { z } from "zod";
+import { cached, invalidate, keys, prefixes, cacheStats } from "./cache";
 
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
   // ---------------- AUTH ----------------
@@ -63,30 +64,42 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json({ weeks });
   });
 
+  // Cached per-user for 10s. Includes myPicks/myUpsetPick, so keyed by user
+  // AND week. Invalidated on any write that changes the picks the caller
+  // sees (their own pick, their upset pick, week status changes,
+  // admin game edits).
   app.get("/api/weeks/:id/dashboard", requireAuth, async (req, res) => {
     const weekId = Number(req.params.id);
-    const week = await storage.getWeek(weekId);
-    if (!week) return res.status(404).json({ message: "Week not found" });
+    const userId = req.user!.id;
+    const payload = await cached(keys.dashboard(userId, weekId), 10_000, async () => {
+      const week = await storage.getWeek(weekId);
+      if (!week) return { _notFound: true as const };
 
-    const allGames = await storage.listGamesByWeek(weekId);
-    const selectedGames = allGames.filter((g) => g.isSelected);
-    const availableForUpset = allGames.filter((g) => !g.isSelected);
+      const allGames = await storage.listGamesByWeek(weekId);
+      const selectedGames = allGames.filter((g) => g.isSelected);
+      const availableForUpset = allGames.filter((g) => !g.isSelected);
 
-    const myPicks = await storage.listPicksByUser(req.user!.id, weekId);
-    const myUpsetPick = await storage.getUpsetPick(weekId, req.user!.id);
+      const myPicks = await storage.listPicksByUser(userId, weekId);
+      const myUpsetPick = await storage.getUpsetPick(weekId, userId);
 
-    const now = Date.now();
-    const deadlinePassed = now >= new Date(week.pickDeadline).getTime();
+      const now = Date.now();
+      const deadlinePassed = now >= new Date(week.pickDeadline).getTime();
 
-    res.json({
-      week,
-      games: selectedGames,
-      availableForUpset,
-      myPicks,
-      myUpsetPick: myUpsetPick ?? null,
-      deadlinePassed,
-      locked: week.status !== "open" || deadlinePassed,
+      return {
+        week,
+        games: selectedGames,
+        availableForUpset,
+        myPicks,
+        myUpsetPick: myUpsetPick ?? null,
+        deadlinePassed,
+        locked: week.status !== "open" || deadlinePassed,
+      };
     });
+
+    if ((payload as { _notFound?: boolean })._notFound) {
+      return res.status(404).json({ message: "Week not found" });
+    }
+    res.json(payload);
   });
 
   app.post("/api/weeks/:id/picks", requireAuth, async (req, res) => {
@@ -117,6 +130,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       selectedTeam: parsed.data.selectedTeam,
       submittedAt: new Date().toISOString(),
     });
+    // Invalidate: this user's dashboard for this week (their picks changed)
+    // and the grid for this week (consensus % changed).
+    invalidate(`dashboard:v1:${req.user!.id}:${weekId}`);
+    invalidate(keys.grid(weekId));
     res.json({ pick });
   });
 
@@ -172,6 +189,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       saved.push({ gameId: game.id, selectedTeam: entry.selectedTeam });
     }
 
+    if (saved.length > 0) {
+      invalidate(`dashboard:v1:${req.user!.id}:${weekId}`);
+      invalidate(keys.grid(weekId));
+    }
     res.json({ saved, skipped });
   });
 
@@ -208,27 +229,35 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       spread: game.spread,
       submittedAt: new Date().toISOString(),
     });
+    invalidate(`dashboard:v1:${req.user!.id}:${weekId}`);
+    invalidate(keys.grid(weekId));
     res.json({ upsetPick, potentialPoints: upsetPickPoints(game.spread) });
   });
 
   // ---------------- STANDINGS ----------------
+  // Cached for 30s. Standings only change when a week is graded, which is
+  // a manual admin action — 30s is well below any real refresh cadence and
+  // still keeps game-day load minimal. Invalidated in the grading handler.
   app.get("/api/standings", requireAuth, async (_req, res) => {
-    const rows = await computeStandings();
-    const weeks = await storage.listWeeks();
-    const gradedWeeks = weeks.filter((w) => w.status === "graded").sort((a, b) => a.weekNumber - b.weekNumber);
+    const payload = await cached(keys.standings(), 30_000, async () => {
+      const rows = await computeStandings();
+      const weeks = await storage.listWeeks();
+      const gradedWeeks = weeks.filter((w) => w.status === "graded").sort((a, b) => a.weekNumber - b.weekNumber);
 
-    // Rank-change arrows compare the current standings to how they stood
-    // before the most recently graded week's points were added. Only
-    // meaningful once at least two weeks have been graded.
-    let rowsWithChange = rows;
-    if (gradedWeeks.length >= 2) {
-      const priorWeekIds = gradedWeeks.slice(0, -1).map((w) => w.id);
-      const priorRows = await computeStandings(priorWeekIds);
-      const priorRankByUser = new Map(priorRows.map((r) => [r.userId, r.rank]));
-      rowsWithChange = rows.map((r) => ({ ...r, previousRank: priorRankByUser.get(r.userId) ?? null }));
-    }
+      // Rank-change arrows compare the current standings to how they stood
+      // before the most recently graded week's points were added. Only
+      // meaningful once at least two weeks have been graded.
+      let rowsWithChange = rows;
+      if (gradedWeeks.length >= 2) {
+        const priorWeekIds = gradedWeeks.slice(0, -1).map((w) => w.id);
+        const priorRows = await computeStandings(priorWeekIds);
+        const priorRankByUser = new Map(priorRows.map((r) => [r.userId, r.rank]));
+        rowsWithChange = rows.map((r) => ({ ...r, previousRank: priorRankByUser.get(r.userId) ?? null }));
+      }
 
-    res.json({ rows: rowsWithChange, weeks: gradedWeeks });
+      return { rows: rowsWithChange, weeks: gradedWeeks };
+    });
+    res.json(payload);
   });
 
   // ---------------- CRISTO-BALL ----------------
@@ -253,6 +282,28 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
     const entry = await storage.upsertCristoBallEntry({ ...parsed.data, userId: req.user!.id });
     res.json({ entry });
+  });
+
+  // ---------------- ADMIN CACHE INVALIDATION ----------------
+  // Any admin write can change data reflected in cached reads (standings,
+  // grid, dashboard) for someone. Rather than tracking exactly which
+  // endpoints affect which caches, we invalidate all three prefixes on the
+  // response of any successful (2xx) admin write. Over-invalidation costs
+  // a recompute; under-invalidation shows stale data — the former is safer.
+  //
+  // Mounted before the admin routes so `res.on('finish')` is attached
+  // before responses are sent.
+  app.use("/api/admin", (req, res, next) => {
+    const isWrite = req.method !== "GET" && req.method !== "HEAD";
+    if (!isWrite) return next();
+    res.on("finish", () => {
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        invalidate(prefixes.standings);
+        invalidate(prefixes.grid);
+        invalidate(prefixes.dashboard);
+      }
+    });
+    next();
   });
 
   app.get("/api/admin/cristoball", requireAdmin, async (_req, res) => {
@@ -303,6 +354,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   // ---------------- PICKS GRID ----------------
+  // Cached for 15s. The grid is only served once the week is locked, so
+  // its contents can only change when admin edits game results or
+  // regrades — both explicitly invalidated below.
   app.get("/api/weeks/:id/grid", requireAuth, async (req, res) => {
     const weekId = Number(req.params.id);
     const week = await storage.getWeek(weekId);
@@ -314,6 +368,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       return res.status(403).json({ message: "The picks grid unlocks once this week's picks are locked." });
     }
 
+    const payload = await cached(keys.grid(weekId), 15_000, async () => {
+      return await computeGrid(weekId);
+    });
+    return res.json(payload);
+  });
+
+  // Grid computation extracted so it can be called from inside `cached()`.
+  // Kept as a nested helper on the closure so it has access to `storage`.
+  async function computeGrid(weekId: number) {
+    const week = await storage.getWeek(weekId);
     const allGames = await storage.listGamesByWeek(weekId);
     const selectedGames = allGames.filter((g) => g.isSelected);
     const weekPicks = await storage.listPicksByWeek(weekId);
@@ -365,8 +429,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       };
     }
 
-    res.json({ week, games: selectedGames, grid, consensus });
-  });
+    return { week, games: selectedGames, grid, consensus };
+  }
 
   // ---------------- ADMIN: MEMBERS ----------------
   app.get("/api/admin/members", requireAdmin, async (_req, res) => {
