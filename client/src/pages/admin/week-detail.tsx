@@ -26,6 +26,42 @@ interface AdminWeekResponse {
 
 const emptyGameForm = { awayTeam: "", homeTeam: "", favoriteTeam: "", spread: "", kickoff: "", broadcast: "" };
 
+type SubmissionStatus = "none" | "partial" | "complete" | "empty";
+
+function submissionStatus(submitted: number, total: number): SubmissionStatus {
+  if (total === 0) return "empty";
+  if (submitted === 0) return "none";
+  if (submitted < total) return "partial";
+  return "complete";
+}
+
+const submissionRowStyles: Record<SubmissionStatus, string> = {
+  empty: "border-card-border",
+  none: "border-red-500/40 bg-red-500/10",
+  partial: "border-yellow-500/40 bg-yellow-500/10",
+  complete: "border-green-500/40 bg-green-500/10",
+};
+
+const submissionTextStyles: Record<SubmissionStatus, string> = {
+  empty: "text-muted-foreground",
+  none: "text-red-700 dark:text-red-400",
+  partial: "text-yellow-700 dark:text-yellow-400",
+  complete: "text-green-700 dark:text-green-400",
+};
+
+const submissionDotStyles: Record<SubmissionStatus, string> = {
+  empty: "bg-muted-foreground/40",
+  none: "bg-red-500",
+  partial: "bg-yellow-500",
+  complete: "bg-green-500",
+};
+
+const submissionLegend: { status: SubmissionStatus; label: string }[] = [
+  { status: "complete", label: "All picks in" },
+  { status: "partial", label: "Partial" },
+  { status: "none", label: "Nothing yet" },
+];
+
 export default function AdminWeekDetailPage() {
   const params = useParams<{ id: string }>();
   const weekId = Number(params.id);
@@ -366,19 +402,34 @@ export default function AdminWeekDetailPage() {
       </Card>
 
       <Card>
-        <CardHeader>
+        <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3 space-y-0">
           <CardTitle className="text-base">Pick progress</CardTitle>
+          <div className="flex flex-wrap items-center gap-3">
+            {submissionLegend.map((item) => (
+              <div key={item.status} className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span className={cn("h-2.5 w-2.5 rounded-full", submissionDotStyles[item.status])} />
+                {item.label}
+              </div>
+            ))}
+          </div>
         </CardHeader>
         <CardContent className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-          {pickProgress.map((p) => (
-            <div key={p.userId} className="flex items-center justify-between rounded-md border border-card-border px-3 py-2 text-sm" data-testid={`row-progress-${p.userId}`}>
-              <span>{p.name}</span>
-              <span className="text-xs text-muted-foreground">
-                {p.picksSubmitted}/{selectedGames.length}
-                {p.hasUpsetPick ? " +U" : ""}
-              </span>
-            </div>
-          ))}
+          {pickProgress.map((p) => {
+            const status = submissionStatus(p.picksSubmitted, selectedGames.length);
+            return (
+              <div
+                key={p.userId}
+                className={cn("flex items-center justify-between rounded-md border px-3 py-2 text-sm", submissionRowStyles[status])}
+                data-testid={`row-progress-${p.userId}`}
+              >
+                <span>{p.name}</span>
+                <span className={cn("text-xs font-medium", submissionTextStyles[status])}>
+                  {p.picksSubmitted}/{selectedGames.length}
+                  {p.hasUpsetPick ? " +U" : ""}
+                </span>
+              </div>
+            );
+          })}
         </CardContent>
       </Card>
     </div>
