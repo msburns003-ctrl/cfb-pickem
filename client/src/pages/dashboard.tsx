@@ -82,8 +82,57 @@ export default function DashboardPage() {
         toast({ title: `Saved ${result.saved.length} pick${result.saved.length === 1 ? "" : "s"}` });
       }
     },
-    onError: (err) => {
-      toast({ title: "Couldn't save picks", description: err instanceof Error ? err.message : undefined, variant: "destructive" });
+    // A network drop can happen after the server already wrote the picks
+    // but before the response reaches this device (this is exactly what
+    // happened to a member on a flaky mobile connection — 12 of 15 picks
+    // saved server-side, yet the client only saw a failed fetch and kept
+    // showing all 15 as unsaved). Rather than trust the failure blindly,
+    // re-fetch server truth and reconcile before deciding what to tell them.
+    onError: async (err, variables) => {
+      try {
+        const fresh = await queryClient.fetchQuery<DashboardResponse>({
+          queryKey: [`/api/weeks/${activeWeekId}/dashboard`],
+        });
+        const freshByGame = new Map(fresh.myPicks.map((p) => [p.gameId, p.selectedTeam]));
+        const actuallySaved = variables.filter((v) => freshByGame.get(v.gameId) === v.selectedTeam);
+        const stillUnsaved = variables.filter((v) => freshByGame.get(v.gameId) !== v.selectedTeam);
+
+        if (actuallySaved.length > 0) {
+          queryClient.setQueryData([`/api/weeks/${activeWeekId}/dashboard`], fresh);
+          setLocalPicks((prev) => {
+            const next = new Map(prev);
+            actuallySaved.forEach((s) => next.delete(s.gameId));
+            return next;
+          });
+        }
+
+        if (stillUnsaved.length === 0) {
+          toast({
+            title: `Saved ${actuallySaved.length} pick${actuallySaved.length === 1 ? "" : "s"}`,
+            description: "Your connection dropped right after saving, but we double-checked — everything made it through.",
+          });
+        } else if (actuallySaved.length > 0) {
+          toast({
+            title: `Saved ${actuallySaved.length}, ${stillUnsaved.length} still need saving`,
+            description: "Your connection was unstable partway through. Those picks saved before it dropped — press Save picks again for the rest.",
+            variant: "destructive",
+          });
+        } else {
+          toast({
+            title: "Couldn't save picks",
+            description: "We checked and nothing went through. Check your connection and try again.",
+            variant: "destructive",
+          });
+        }
+      } catch {
+        // The reconciliation check itself failed (e.g. fully offline) — fall
+        // back to the plain error rather than silently swallowing it.
+        toast({
+          title: "Couldn't save picks",
+          description: err instanceof Error ? err.message : "Check your connection and try again.",
+          variant: "destructive",
+        });
+      }
     },
   });
 
@@ -96,8 +145,26 @@ export default function DashboardPage() {
       queryClient.invalidateQueries({ queryKey: [`/api/weeks/${activeWeekId}/dashboard`] });
       toast({ title: "Underdog pick locked in" });
     },
-    onError: (err) => {
-      toast({ title: "Couldn't save pick", description: err instanceof Error ? err.message : undefined, variant: "destructive" });
+    // Same reconciliation as the picks batch save: check whether the write
+    // actually landed before reporting a scary error.
+    onError: async (err, gameId) => {
+      try {
+        const fresh = await queryClient.fetchQuery<DashboardResponse>({
+          queryKey: [`/api/weeks/${activeWeekId}/dashboard`],
+        });
+        if (fresh.myUpsetPick?.gameId === gameId) {
+          queryClient.setQueryData([`/api/weeks/${activeWeekId}/dashboard`], fresh);
+          toast({ title: "Underdog pick locked in", description: "Your connection dropped right after saving, but we double-checked — it made it through." });
+        } else {
+          toast({
+            title: "Couldn't save pick",
+            description: err instanceof Error ? err.message : "Check your connection and try again.",
+            variant: "destructive",
+          });
+        }
+      } catch {
+        toast({ title: "Couldn't save pick", description: err instanceof Error ? err.message : undefined, variant: "destructive" });
+      }
     },
   });
 

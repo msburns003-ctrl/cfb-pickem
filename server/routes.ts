@@ -149,27 +149,37 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const skipped: { gameId: number; message: string }[] = [];
     const now = Date.now();
 
+    // Each entry is fully isolated: a thrown error while saving one pick
+    // (a transient DB hiccup, a dropped Supabase connection, anything
+    // unexpected) must never take down entries that come after it in the
+    // array, and must never erase entries that already succeeded before it.
+    // A partial response is always better than a crashed one.
     for (const entry of parsed.data.picks) {
-      const game = await storage.getGame(entry.gameId);
-      if (!game || game.weekId !== weekId || !game.isSelected) {
-        skipped.push({ gameId: entry.gameId, message: "Not part of this week's slate" });
-        continue;
+      try {
+        const game = await storage.getGame(entry.gameId);
+        if (!game || game.weekId !== weekId || !game.isSelected) {
+          skipped.push({ gameId: entry.gameId, message: "Not part of this week's slate" });
+          continue;
+        }
+        if (![game.awayTeam, game.homeTeam].includes(entry.selectedTeam)) {
+          skipped.push({ gameId: entry.gameId, message: "Not one of the two teams playing" });
+          continue;
+        }
+        if (now >= new Date(game.kickoff).getTime()) {
+          skipped.push({ gameId: entry.gameId, message: "Kickoff already passed" });
+          continue;
+        }
+        await storage.upsertPick({
+          gameId: game.id,
+          userId: req.user!.id,
+          selectedTeam: entry.selectedTeam,
+          submittedAt: new Date().toISOString(),
+        });
+        saved.push({ gameId: game.id, selectedTeam: entry.selectedTeam });
+      } catch (err) {
+        console.error(`picks/batch: failed to save gameId=${entry.gameId} for userId=${req.user!.id}`, err);
+        skipped.push({ gameId: entry.gameId, message: "Couldn't save this one — try again" });
       }
-      if (![game.awayTeam, game.homeTeam].includes(entry.selectedTeam)) {
-        skipped.push({ gameId: entry.gameId, message: "Not one of the two teams playing" });
-        continue;
-      }
-      if (now >= new Date(game.kickoff).getTime()) {
-        skipped.push({ gameId: entry.gameId, message: "Kickoff already passed" });
-        continue;
-      }
-      await storage.upsertPick({
-        gameId: game.id,
-        userId: req.user!.id,
-        selectedTeam: entry.selectedTeam,
-        submittedAt: new Date().toISOString(),
-      });
-      saved.push({ gameId: game.id, selectedTeam: entry.selectedTeam });
     }
 
     res.json({ saved, skipped });
