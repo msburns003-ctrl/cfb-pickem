@@ -403,9 +403,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         }
       }
       const upset = weekUpsetPicks.find((u) => u.userId === m.id) ?? null;
+      const picksPoints = weekPicks
+        .filter((p) => p.userId === m.id)
+        .reduce((sum, p) => sum + (p.pointsEarned ?? 0), 0);
+      const weekPoints = picksPoints + (upset?.pointsEarned ?? 0);
       return {
         userId: m.id,
         name: m.name,
+        weekPoints,
         picks: picksByGame,
         upsetPick: upset
           ? {
@@ -418,6 +423,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           : null,
       };
     });
+    grid.sort((a, b) => b.weekPoints - a.weekPoints);
 
     // Consensus % per game: how the league split on each side, based on
     // picks actually submitted so far. Follows the same reveal timing as the

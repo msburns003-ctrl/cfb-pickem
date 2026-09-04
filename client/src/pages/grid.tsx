@@ -11,6 +11,7 @@ import type { Game, Week } from "@shared/schema";
 interface GridRow {
   userId: number;
   name: string;
+  weekPoints: number;
   picks: Record<number, { selectedTeam: string; isCorrect: boolean | null }>;
   upsetPick: {
     underdogTeam: string;
@@ -119,6 +120,7 @@ export default function GridPage() {
                 <thead>
                   <tr className="border-b border-card-border bg-muted/50 text-left text-xs uppercase tracking-wide text-muted-foreground">
                     <th className="sticky left-0 z-10 bg-muted/50 px-3 py-2 font-medium">Member</th>
+                    <th className="px-3 py-2 text-center font-medium whitespace-nowrap">Pts</th>
                     {data.games.map((g) => (
                       <th key={g.id} className="px-3 py-2 text-center font-medium whitespace-nowrap">
                         <div>
@@ -143,6 +145,7 @@ export default function GridPage() {
                     <td className="sticky left-0 z-10 bg-muted/30 px-3 py-2 font-medium text-muted-foreground whitespace-nowrap">
                       Consensus
                     </td>
+                    <td className="px-3 py-2" />
                     {data.games.map((g) => {
                       const c = data.consensus[g.id];
                       if (!c || c.totalPicks === 0) {
@@ -190,6 +193,9 @@ export default function GridPage() {
                       <td className="sticky left-0 z-10 bg-background px-3 py-2 font-medium whitespace-nowrap">
                         {row.name}
                         {row.userId === user?.id && <span className="ml-1.5 text-xs text-muted-foreground">(you)</span>}
+                      </td>
+                      <td className="px-3 py-2 text-center font-semibold whitespace-nowrap" data-testid={`text-grid-points-${row.userId}`}>
+                        {row.weekPoints}
                       </td>
                       {data.games.map((g) => {
                         const pick = row.picks[g.id];
