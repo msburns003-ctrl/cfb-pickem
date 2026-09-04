@@ -11,9 +11,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Plus, Trash2, Trophy, DollarSign, RefreshCw } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, Trophy, DollarSign, RefreshCw, Download } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatEastern, isoToEasternInputValue, easternInputValueToIso } from "@/lib/time";
+import type { GridResponse } from "@/lib/grid-pdf";
 import type { Game, Week } from "@shared/schema";
 
 interface AdminWeekResponse {
@@ -144,6 +145,23 @@ export default function AdminWeekDetailPage() {
     onError: (err) => toast({ title: "Couldn't grade games", description: err instanceof Error ? err.message : undefined, variant: "destructive" }),
   });
 
+  const downloadGridMutation = useMutation({
+    mutationFn: async () => {
+      const [res, { downloadGridPdf }] = await Promise.all([
+        apiRequest("GET", `/api/weeks/${weekId}/grid`),
+        import("@/lib/grid-pdf"),
+      ]);
+      const gridData = (await res.json()) as GridResponse;
+      downloadGridPdf(gridData);
+    },
+    onError: (err) =>
+      toast({
+        title: "Couldn't generate PDF",
+        description: err instanceof Error ? err.message : "The grid isn't available yet.",
+        variant: "destructive",
+      }),
+  });
+
   const checkGamesMutation = useMutation({
     mutationFn: async () => {
       const res = await apiRequest("POST", `/api/admin/weeks/${weekId}/check-games`);
@@ -166,6 +184,7 @@ export default function AdminWeekDetailPage() {
   if (isLoading || !data) return <p className="text-muted-foreground">Loading...</p>;
 
   const { week, games, pickProgress, weeklyWinners } = data;
+  const isGridLocked = week.status !== "open" || Date.now() >= new Date(week.pickDeadline).getTime();
   const payoutAmountValue = payoutDraft ?? (week.payoutAmount != null ? String(week.payoutAmount) : "");
   const selectedGames = games.filter((g) => g.isSelected);
   const candidateGames = games.filter((g) => !g.isSelected);
@@ -175,14 +194,31 @@ export default function AdminWeekDetailPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-center gap-2">
-        <Link href="/admin" data-testid="link-back-weeks">
-          <Button variant="ghost" size="icon">
-            <ArrowLeft className="h-4 w-4" />
+      <div className="flex flex-col gap-1">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <Link href="/admin" data-testid="link-back-weeks">
+              <Button variant="ghost" size="icon">
+                <ArrowLeft className="h-4 w-4" />
+              </Button>
+            </Link>
+            <h2 className="font-display text-lg font-semibold">{week.label}</h2>
+            <Badge>{week.status}</Badge>
+          </div>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => downloadGridMutation.mutate()}
+            disabled={!isGridLocked || downloadGridMutation.isPending}
+            data-testid="button-download-grid-pdf"
+          >
+            <Download className="h-4 w-4" />
+            {downloadGridMutation.isPending ? "Preparing PDF..." : "Download Grid PDF"}
           </Button>
-        </Link>
-        <h2 className="font-display text-lg font-semibold">{week.label}</h2>
-        <Badge>{week.status}</Badge>
+        </div>
+        {!isGridLocked && (
+          <p className="text-xs text-muted-foreground">The grid unlocks once picks are locked for this week.</p>
+        )}
       </div>
 
       <Card>
