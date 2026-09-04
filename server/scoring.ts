@@ -1,6 +1,7 @@
 import { storage } from "./storage";
 import type {
   Game,
+  Week,
   CristoBallEntry,
   CristoBallResults,
   CristoBallPointsBreakdown,
@@ -48,33 +49,19 @@ export function gradeGameOutcome(game: Game) {
 }
 
 /**
- * Grades every submitted pick for a week's selected games, assigns money-game
- * bonuses based on the most evenly-split games, and grades the bonus upset pick.
- * Call once all selected games for the week are marked final with scores.
+ * Determines the N selected games whose picks are most evenly split (smallest
+ * absolute difference between the two side pick-counts) and flags them as
+ * money games worth 2x points. Reads whatever picks have been submitted at
+ * the time it's called, so it must only run once picks are locked in.
  */
-export async function gradeWeek(weekId: number) {
+export async function assignMoneyGames(weekId: number): Promise<void> {
   const week = await storage.getWeek(weekId);
   if (!week) throw new Error("Week not found");
 
   const allGames = await storage.listGamesByWeek(weekId);
   const selectedGames = allGames.filter((g) => g.isSelected);
-  const unfinished = selectedGames.filter((g) => g.status !== "final");
-  if (unfinished.length > 0) {
-    throw new Error(`${unfinished.length} selected game(s) are not yet final`);
-  }
-
   const weekPicks = await storage.listPicksByWeek(weekId);
 
-  // 1. Determine winner/ATS result per game, and correctness per pick
-  const gameResults = new Map<number, { winner: string | null; atsResult: "favorite" | "underdog" | "push" }>();
-  for (const game of selectedGames) {
-    const result = gradeGameOutcome(game);
-    gameResults.set(game.id, result);
-    await storage.updateGame(game.id, { winner: result.winner ?? undefined, atsResult: result.atsResult });
-  }
-
-  // 2. Determine money games: the N selected games whose picks are most evenly split
-  //    (smallest absolute difference between the two side pick-counts).
   const splitDiff = new Map<number, number>();
   for (const game of selectedGames) {
     const gamePicks = weekPicks.filter((p) => p.gameId === game.id);
@@ -91,12 +78,70 @@ export async function gradeWeek(weekId: number) {
   for (const game of selectedGames) {
     await storage.updateGame(game.id, { isMoneyGame: moneyGameIds.has(game.id) });
   }
+}
 
-  // 3. Grade each pick
-  for (const game of selectedGames) {
-    const result = gameResults.get(game.id)!;
+/**
+ * Fires the money-game assignment exactly once, the first time a week is
+ * observed to be locked (deadline passed, or an admin manually locked it).
+ * Safe to call on every read of the week — it's a no-op once
+ * `moneyGamesAssigned` is true, and it does nothing before lock so picks
+ * submitted while the week is still open can't be influenced by knowing
+ * which games are worth double points.
+ */
+export async function ensureMoneyGamesAssigned(week: Week): Promise<Week> {
+  if (week.moneyGamesAssigned) return week;
+
+  const now = Date.now();
+  const isLocked =
+    week.status === "locked" ||
+    week.status === "graded" ||
+    (week.status === "open" && now >= new Date(week.pickDeadline).getTime());
+  if (!isLocked) return week;
+
+  await assignMoneyGames(week.id);
+  const updated = await storage.updateWeek(week.id, { moneyGamesAssigned: true });
+  return updated ?? week;
+}
+
+export interface GradeCompletedGamesResult {
+  gradedGameIds: number[];
+  pendingGameIds: number[];
+  weekFullyGraded: boolean;
+}
+
+/**
+ * Grades every selected game that's currently marked final — assigning
+ * points to correct picks (including the 2x money-game bonus, and grading
+ * the bonus upset pick for any now-final game it references) — while
+ * leaving games still in progress untouched. Can be called repeatedly as
+ * more games finish throughout the week; the week's status only flips to
+ * "graded" once every selected game has been scored.
+ */
+export async function gradeCompletedGames(weekId: number): Promise<GradeCompletedGamesResult> {
+  let week = await storage.getWeek(weekId);
+  if (!week) throw new Error("Week not found");
+
+  // Safety net: make sure money games are committed even if no read path
+  // has observed the lock transition yet (e.g. admin locks and immediately grades).
+  week = await ensureMoneyGamesAssigned(week);
+
+  const allGames = await storage.listGamesByWeek(weekId);
+  const selectedGames = allGames.filter((g) => g.isSelected);
+  const finalGames = selectedGames.filter((g) => g.status === "final");
+  const pendingGames = selectedGames.filter((g) => g.status !== "final");
+
+  if (finalGames.length === 0) {
+    throw new Error("No selected games are marked final yet.");
+  }
+
+  const weekPicks = await storage.listPicksByWeek(weekId);
+
+  for (const game of finalGames) {
+    const result = gradeGameOutcome(game);
+    await storage.updateGame(game.id, { winner: result.winner ?? undefined, atsResult: result.atsResult });
+
     const gamePicks = weekPicks.filter((p) => p.gameId === game.id);
-    const isMoneyGame = moneyGameIds.has(game.id);
+    const isMoneyGame = game.isMoneyGame;
     for (const pick of gamePicks) {
       let isCorrect: boolean;
       if (result.atsResult === "push") {
@@ -113,10 +158,10 @@ export async function gradeWeek(weekId: number) {
     }
   }
 
-  // 4. Grade the bonus upset pick for the week
+  // Grade any bonus upset pick whose underlying game is now final.
   const weekUpsetPicks = await storage.listUpsetPicksByWeek(weekId);
   for (const up of weekUpsetPicks) {
-    const game = await storage.getGame(up.gameId);
+    const game = allGames.find((g) => g.id === up.gameId);
     if (!game || game.status !== "final" || game.awayScore == null || game.homeScore == null) continue;
     const result = gradeGameOutcome(game);
     let outcome: "win" | "loss" | "push";
@@ -132,7 +177,16 @@ export async function gradeWeek(weekId: number) {
     await storage.updateUpsetPick(up.id, { result: outcome, pointsEarned });
   }
 
-  await storage.updateWeek(weekId, { status: "graded" });
+  const weekFullyGraded = pendingGames.length === 0;
+  if (weekFullyGraded && week.status !== "graded") {
+    await storage.updateWeek(weekId, { status: "graded" });
+  }
+
+  return {
+    gradedGameIds: finalGames.map((g) => g.id),
+    pendingGameIds: pendingGames.map((g) => g.id),
+    weekFullyGraded,
+  };
 }
 
 /** Tiered points for a winning underdog bonus pick, based on the spread magnitude. */

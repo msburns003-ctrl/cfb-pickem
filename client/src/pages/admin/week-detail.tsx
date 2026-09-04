@@ -125,13 +125,23 @@ export default function AdminWeekDetailPage() {
   });
 
   const gradeMutation = useMutation({
-    mutationFn: () => apiRequest("POST", `/api/admin/weeks/${weekId}/grade`),
-    onSuccess: () => {
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/admin/weeks/${weekId}/grade`);
+      return (await res.json()) as { ok: true; gradedGameIds: number[]; pendingGameIds: number[]; weekFullyGraded: boolean };
+    },
+    onSuccess: (result) => {
       invalidate();
       queryClient.invalidateQueries({ queryKey: ["/api/standings"] });
-      toast({ title: "Week graded", description: "Standings have been updated." });
+      const gradedCount = result.gradedGameIds.length;
+      const pendingCount = result.pendingGameIds.length;
+      toast({
+        title: result.weekFullyGraded ? "Week fully graded" : `Graded ${gradedCount} game${gradedCount === 1 ? "" : "s"}`,
+        description: result.weekFullyGraded
+          ? "All selected games are final. Standings have been updated."
+          : `${pendingCount} game${pendingCount === 1 ? "" : "s"} still in progress — grade again once they finish.`,
+      });
     },
-    onError: (err) => toast({ title: "Couldn't grade week", description: err instanceof Error ? err.message : undefined, variant: "destructive" }),
+    onError: (err) => toast({ title: "Couldn't grade games", description: err instanceof Error ? err.message : undefined, variant: "destructive" }),
   });
 
   const checkGamesMutation = useMutation({
@@ -159,7 +169,9 @@ export default function AdminWeekDetailPage() {
   const payoutAmountValue = payoutDraft ?? (week.payoutAmount != null ? String(week.payoutAmount) : "");
   const selectedGames = games.filter((g) => g.isSelected);
   const candidateGames = games.filter((g) => !g.isSelected);
+  const finalSelectedGames = selectedGames.filter((g) => g.status === "final");
   const allSelectedFinal = selectedGames.length > 0 && selectedGames.every((g) => g.status === "final");
+  const anySelectedFinal = finalSelectedGames.length > 0;
 
   return (
     <div className="flex flex-col gap-6">
@@ -214,13 +226,19 @@ export default function AdminWeekDetailPage() {
           <div className="flex flex-col justify-end">
             <Button
               onClick={() => gradeMutation.mutate()}
-              disabled={!allSelectedFinal || gradeMutation.isPending}
+              disabled={!anySelectedFinal || gradeMutation.isPending}
               data-testid="button-grade-week"
             >
-              <Trophy className="h-4 w-4" /> Grade Week
+              <Trophy className="h-4 w-4" /> Grade Completed Games
             </Button>
-            {!allSelectedFinal && selectedGames.length > 0 && (
-              <p className="mt-1 text-xs text-muted-foreground">Enter final scores for all selected games first.</p>
+            {selectedGames.length > 0 && (
+              <p className="mt-1 text-xs text-muted-foreground">
+                {allSelectedFinal
+                  ? "All games final — this will finish grading the week."
+                  : anySelectedFinal
+                    ? `${finalSelectedGames.length}/${selectedGames.length} games final — grading now only scores those.`
+                    : "Enter a final score for at least one selected game first."}
+              </p>
             )}
           </div>
         </CardContent>
@@ -351,6 +369,11 @@ export default function AdminWeekDetailPage() {
                     </p>
                   </div>
                   <div className="flex w-full flex-wrap items-center gap-3 sm:w-auto sm:justify-end">
+                    {game.isSelected && game.isMoneyGame && (
+                      <Badge className="gap-1 bg-accent text-accent-foreground" data-testid={`badge-admin-money-${game.id}`}>
+                        <DollarSign className="h-3 w-3" /> Money game
+                      </Badge>
+                    )}
                     {game.status === "final" ? (
                       <Badge variant="outline">
                         Final {game.awayScore}-{game.homeScore}

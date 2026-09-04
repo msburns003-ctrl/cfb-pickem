@@ -5,7 +5,8 @@ import { storage } from "./storage";
 import { hashPassword, verifyPassword, generateToken, generateTempPassword, requireAuth, requireAdmin, toPublicUser, setAuthCookie, clearAuthCookie } from "./auth";
 import {
   computePickType,
-  gradeWeek,
+  gradeCompletedGames,
+  ensureMoneyGamesAssigned,
   upsetPickPoints,
   computeStandings,
   ATS_THRESHOLD,
@@ -65,8 +66,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.get("/api/weeks/:id/dashboard", requireAuth, async (req, res) => {
     const weekId = Number(req.params.id);
-    const week = await storage.getWeek(weekId);
+    let week = await storage.getWeek(weekId);
     if (!week) return res.status(404).json({ message: "Week not found" });
+    week = await ensureMoneyGamesAssigned(week);
 
     const allGames = await storage.listGamesByWeek(weekId);
     const selectedGames = allGames.filter((g) => g.isSelected);
@@ -315,7 +317,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // ---------------- PICKS GRID ----------------
   app.get("/api/weeks/:id/grid", requireAuth, async (req, res) => {
     const weekId = Number(req.params.id);
-    const week = await storage.getWeek(weekId);
+    let week = await storage.getWeek(weekId);
     if (!week) return res.status(404).json({ message: "Week not found" });
 
     const now = Date.now();
@@ -323,6 +325,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (!locked) {
       return res.status(403).json({ message: "The picks grid unlocks once this week's picks are locked." });
     }
+    week = await ensureMoneyGamesAssigned(week);
 
     const allGames = await storage.listGamesByWeek(weekId);
     const selectedGames = allGames.filter((g) => g.isSelected);
@@ -446,8 +449,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     });
     const parsed = schema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: "Invalid fields" });
-    const updated = await storage.updateWeek(Number(req.params.id), parsed.data);
+    let updated = await storage.updateWeek(Number(req.params.id), parsed.data);
     if (!updated) return res.status(404).json({ message: "Week not found" });
+    updated = await ensureMoneyGamesAssigned(updated);
     res.json({ week: updated });
   });
 
@@ -474,8 +478,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.get("/api/admin/weeks/:id", requireAdmin, async (req, res) => {
     const weekId = Number(req.params.id);
-    const week = await storage.getWeek(weekId);
+    let week = await storage.getWeek(weekId);
     if (!week) return res.status(404).json({ message: "Week not found" });
+    week = await ensureMoneyGamesAssigned(week);
     const allGames = await storage.listGamesByWeek(weekId);
     const weekPicks = await storage.listPicksByWeek(weekId);
     const weekUpsetPicks = await storage.listUpsetPicksByWeek(weekId);
@@ -591,10 +596,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.post("/api/admin/weeks/:id/grade", requireAdmin, async (req, res) => {
     try {
-      await gradeWeek(Number(req.params.id));
-      res.json({ ok: true });
+      const result = await gradeCompletedGames(Number(req.params.id));
+      res.json({ ok: true, ...result });
     } catch (err) {
-      res.status(400).json({ message: err instanceof Error ? err.message : "Failed to grade week" });
+      res.status(400).json({ message: err instanceof Error ? err.message : "Failed to grade games" });
     }
   });
 

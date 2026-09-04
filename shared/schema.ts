@@ -33,6 +33,7 @@ export interface Week {
   status: WeekStatus;
   payoutAmount: number | null;
   payoutPaid: boolean;
+  moneyGamesAssigned: boolean;
 }
 
 export const insertWeekSchema = z.object({
@@ -44,6 +45,7 @@ export const insertWeekSchema = z.object({
   status: z.enum(["setup", "open", "locked", "graded"]).optional(),
   payoutAmount: z.number().nullable().optional(),
   payoutPaid: z.boolean().optional(),
+  moneyGamesAssigned: z.boolean().optional(),
 });
 export type InsertWeek = z.infer<typeof insertWeekSchema>;
 

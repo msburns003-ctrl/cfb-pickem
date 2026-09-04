@@ -22,7 +22,8 @@ create table if not exists weeks (
   money_game_count integer not null default 2,
   status text not null default 'setup' check (status in ('setup','open','locked','graded')),
   payout_amount double precision,
-  payout_paid boolean not null default false
+  payout_paid boolean not null default false,
+  money_games_assigned boolean not null default false
 );
 
 create table if not exists games (
