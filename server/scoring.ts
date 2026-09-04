@@ -1,4 +1,5 @@
 import { storage } from "./storage";
+import { invalidate, prefixes } from "./cache";
 import type {
   Game,
   Week,
@@ -100,6 +101,13 @@ export async function ensureMoneyGamesAssigned(week: Week): Promise<Week> {
 
   await assignMoneyGames(week.id);
   const updated = await storage.updateWeek(week.id, { moneyGamesAssigned: true });
+  // This mutation happens lazily inside read routes (dashboard/grid), so it
+  // isn't covered by the admin-write cache invalidation middleware. Without
+  // this, other users could briefly see a cached grid/dashboard from just
+  // before lock with no money games labeled. It only fires once per week
+  // (no-op above on every call after), so blanket invalidation here is cheap.
+  invalidate(prefixes.grid);
+  invalidate(prefixes.dashboard);
   return updated ?? week;
 }
 
