@@ -212,8 +212,32 @@ export default function GridPage() {
                           </td>
                         );
                       })}
-                      <td className="px-3 py-2 text-center whitespace-nowrap text-muted-foreground">
-                        {row.upsetPick ? shortTeam(row.upsetPick.underdogTeam) : "—"}
+                      <td
+                        className={cn(
+                          "px-3 py-2 text-center whitespace-nowrap",
+                          (!row.upsetPick || row.upsetPick.result === "pending") && "text-muted-foreground",
+                          row.upsetPick?.result === "win" && "text-green-600 dark:text-green-400 font-medium",
+                          row.upsetPick?.result === "loss" && "text-destructive/80",
+                          row.upsetPick?.result === "push" && "text-amber-600 dark:text-amber-400",
+                        )}
+                        data-testid={`text-grid-upset-${row.userId}`}
+                      >
+                        {row.upsetPick ? (
+                          <>
+                            {shortTeam(row.upsetPick.underdogTeam)}
+                            {row.upsetPick.result !== "pending" && (
+                              <span className="ml-1 text-xs opacity-80">
+                                {row.upsetPick.result === "win"
+                                  ? `+${row.upsetPick.pointsEarned}`
+                                  : row.upsetPick.result === "push"
+                                    ? "push"
+                                    : "+0"}
+                              </span>
+                            )}
+                          </>
+                        ) : (
+                          "—"
+                        )}
                       </td>
                     </tr>
                   ))}
