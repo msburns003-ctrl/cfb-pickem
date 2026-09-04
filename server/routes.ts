@@ -14,7 +14,7 @@ import {
   getCristoBallLockDeadline,
   gradeCristoBallEntry,
 } from "./scoring";
-import { insertWeekSchema, type InsertWeek, insertCristoBallEntrySchema, insertCristoBallResultsSchema } from "@shared/schema";
+import { insertWeekSchema, type InsertWeek, insertCristoBallEntrySchema, insertCristoBallResultsSchema, insertCristoBallLockDeadlineSchema } from "@shared/schema";
 import { checkGamesForWeek } from "./scores";
 import { z } from "zod";
 import { cached, invalidate, keys, prefixes, cacheStats } from "./cache";
@@ -347,6 +347,20 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (!parsed.success) return res.status(400).json({ message: "Invalid Cristo-Ball results" });
     const results = await storage.upsertCristoBallResults(parsed.data);
     res.json({ results });
+  });
+
+  // Sets or clears the dedicated Cristo-Ball entry lock deadline, independent
+  // of any week's pick deadline. Passing null reverts to the legacy fallback
+  // (the earliest weekly pick deadline in the season).
+  app.put("/api/admin/cristoball/lock-deadline", requireAdmin, async (req, res) => {
+    const seasonYear = await getCurrentSeasonYear();
+    const parsed = insertCristoBallLockDeadlineSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: "lockDeadline must be an ISO date string or null" });
+    if (parsed.data.lockDeadline !== null && Number.isNaN(new Date(parsed.data.lockDeadline).getTime())) {
+      return res.status(400).json({ message: "lockDeadline must be a valid date" });
+    }
+    const results = await storage.setCristoBallLockDeadline(seasonYear, parsed.data.lockDeadline);
+    res.json({ results, lockDeadline: results.lockDeadline });
   });
 
   app.post("/api/admin/cristoball/grade", requireAdmin, async (_req, res) => {

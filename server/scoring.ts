@@ -228,11 +228,17 @@ export async function getCurrentSeasonYear(): Promise<number> {
 }
 
 /**
- * The Cristo-Ball entry lock deadline mirrors the earliest weekly pick
- * deadline in the season (i.e. Week 1's deadline) — entries lock at the same
- * moment the season's first games kick off. Returns null if no weeks exist.
+ * The Cristo-Ball entry lock deadline. An admin-configured deadline (stored
+ * on cristo_ball_results.lock_deadline) always takes priority, so Cristo-Ball
+ * can be opened or closed independently of any week's picks. If no explicit
+ * deadline has ever been set, this falls back to the legacy behavior: the
+ * earliest weekly pick deadline in the season (i.e. Week 1's deadline).
+ * Returns null if there's no explicit deadline and no weeks exist either.
  */
 export async function getCristoBallLockDeadline(seasonYear: number): Promise<string | null> {
+  const results = await storage.getCristoBallResults(seasonYear);
+  if (results?.lockDeadline) return results.lockDeadline;
+
   const allWeeks = await storage.listWeeks();
   const seasonWeeks = allWeeks.filter((w) => w.seasonYear === seasonYear);
   if (seasonWeeks.length === 0) return null;

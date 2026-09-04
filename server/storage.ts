@@ -102,6 +102,7 @@ export interface IStorage {
   getCristoBallResults(seasonYear: number): Promise<CristoBallResults | undefined>;
   upsertCristoBallResults(results: InsertCristoBallResults): Promise<CristoBallResults>;
   markCristoBallGraded(seasonYear: number, gradedAt: string): Promise<CristoBallResults>;
+  setCristoBallLockDeadline(seasonYear: number, lockDeadline: string | null): Promise<CristoBallResults>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -452,6 +453,38 @@ export class DatabaseStorage implements IStorage {
     assertNoError(error, "upsertCristoBallResults(insert)");
     return rowToCamel<CristoBallResults>(data)!;
   }
+  // Sets (or clears, with null) the dedicated Cristo-Ball entry lock deadline
+  // for a season, independent of the actual-results fields. Creates the
+  // cristo_ball_results row for the season if it doesn't exist yet, so an
+  // admin can set the deadline before entering any actual results.
+  async setCristoBallLockDeadline(seasonYear: number, lockDeadline: string | null): Promise<CristoBallResults> {
+    const existing = await this.getCristoBallResults(seasonYear);
+    if (existing) {
+      const { data, error } = await supabase
+        .from("cristo_ball_results")
+        .update({ lock_deadline: lockDeadline })
+        .eq("id", existing.id)
+        .select()
+        .single();
+      assertNoError(error, "setCristoBallLockDeadline(update)");
+      return rowToCamel<CristoBallResults>(data)!;
+    }
+    const payload = objectToSnake({
+      seasonYear,
+      actualPicks: {},
+      actualSeasonAnswers: {},
+      actualChoicePicks: {},
+      actualWinTotals: {},
+      actualNationalChamp: null,
+      actualPlayoffTeams: [],
+      actualHeisman: null,
+      lockDeadline,
+    });
+    const { data, error } = await supabase.from("cristo_ball_results").insert(payload).select().single();
+    assertNoError(error, "setCristoBallLockDeadline(insert)");
+    return rowToCamel<CristoBallResults>(data)!;
+  }
+
   async markCristoBallGraded(seasonYear: number, gradedAt: string): Promise<CristoBallResults> {
     const existing = await this.getCristoBallResults(seasonYear);
     if (!existing) {

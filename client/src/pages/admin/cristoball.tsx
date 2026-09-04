@@ -21,6 +21,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { formatEastern, isoToEasternInputValue, easternInputValueToIso } from "@/lib/time";
 import {
   CRISTO_BALL_CATEGORIES,
   CRISTO_BALL_SEASON_QUESTIONS,
@@ -103,6 +104,18 @@ export default function AdminCristoBallPage() {
     onError: (err) => toast({ title: "Couldn't save results", description: err instanceof Error ? err.message : undefined, variant: "destructive" }),
   });
 
+  const saveLockDeadlineMutation = useMutation({
+    mutationFn: async (lockDeadline: string | null) => {
+      const res = await apiRequest("PUT", "/api/admin/cristoball/lock-deadline", { lockDeadline });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/cristoball"] });
+      toast({ title: "Cristo-Ball lock deadline updated" });
+    },
+    onError: (err) => toast({ title: "Couldn't update lock deadline", description: err instanceof Error ? err.message : undefined, variant: "destructive" }),
+  });
+
   const gradeMutation = useMutation({
     mutationFn: async () => {
       const res = await apiRequest("POST", "/api/admin/cristoball/grade");
@@ -181,6 +194,46 @@ export default function AdminCristoBallPage() {
               </div>
             );
           })}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Entry lock deadline</CardTitle>
+          <CardDescription>
+            Controls when Cristo-Ball picks lock, independent of any week's pick deadline. Leave blank to fall back to
+            Week 1's deadline.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-3">
+          <div className="flex flex-col gap-1.5 sm:max-w-xs">
+            <Label>Lock deadline (Eastern Time)</Label>
+            <Input
+              type="datetime-local"
+              defaultValue={data.lockDeadline ? isoToEasternInputValue(data.lockDeadline) : ""}
+              onBlur={(e) => e.target.value && saveLockDeadlineMutation.mutate(easternInputValueToIso(e.target.value))}
+              data-testid="input-cristoball-lock-deadline"
+            />
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="text-sm text-muted-foreground" data-testid="text-cristoball-lock-status">
+              {data.locked ? "Locked" : "Open"}
+              {data.lockDeadline
+                ? ` \u00b7 ${data.locked ? "locked" : "locks"} ${formatEastern(data.lockDeadline, { dateStyle: "medium", timeStyle: "short" })}`
+                : " \u00b7 no deadline set, following Week 1's deadline"}
+            </span>
+            {data.lockDeadline && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => saveLockDeadlineMutation.mutate(null)}
+                disabled={saveLockDeadlineMutation.isPending}
+                data-testid="button-clear-cristoball-lock-deadline"
+              >
+                Clear (use Week 1's deadline)
+              </Button>
+            )}
+          </div>
         </CardContent>
       </Card>
 

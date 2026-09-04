@@ -259,7 +259,19 @@ export interface CristoBallResults {
   actualPlayoffTeams: string[];
   actualHeisman: string | null;
   gradedAt: string | null;
+  // Explicit admin-configured entry lock deadline for this season. When set,
+  // this takes priority over the legacy fallback (the earliest weekly pick
+  // deadline in the season) so Cristo-Ball can be opened/closed independently
+  // of any week's picks. Null means "use the legacy fallback".
+  lockDeadline: string | null;
 }
+
+// Dedicated schema for admin-editing just the Cristo-Ball lock deadline,
+// independent of submitting actual results.
+export const insertCristoBallLockDeadlineSchema = z.object({
+  lockDeadline: z.string().nullable(),
+});
+export type InsertCristoBallLockDeadline = z.infer<typeof insertCristoBallLockDeadlineSchema>;
 
 export const insertCristoBallResultsSchema = z.object({
   seasonYear: z.number().int(),
