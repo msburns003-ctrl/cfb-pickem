@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
@@ -55,6 +55,8 @@ export default function GridPage() {
   const { user } = useAuth();
   const { data: weeksData } = useWeeksList();
   const [selectedWeekId, setSelectedWeekId] = useState<number | null>(null);
+  const nameColRef = useRef<HTMLTableCellElement>(null);
+  const [nameColWidth, setNameColWidth] = useState(0);
 
   const weeks = weeksData?.weeks ?? [];
   const activeWeekId = selectedWeekId ?? weeks.find((w) => w.status !== "setup")?.id ?? weeks[0]?.id ?? null;
@@ -64,6 +66,17 @@ export default function GridPage() {
     queryKey: [`/api/weeks/${activeWeekId}/grid`],
     enabled: !!activeWeekId,
   });
+
+  // Measure the actual rendered width of the Member column (it hugs its
+  // content) so the pinned Pts column can sit flush against it with no gap.
+  useLayoutEffect(() => {
+    const measure = () => {
+      if (nameColRef.current) setNameColWidth(nameColRef.current.getBoundingClientRect().width);
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, [data]);
 
   if (!weeks.length) {
     return (
@@ -119,8 +132,13 @@ export default function GridPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-card-border bg-muted/50 text-left text-xs uppercase tracking-wide text-muted-foreground">
-                    <th className="sticky left-0 z-20 w-40 bg-muted px-3 py-2 font-medium">Member</th>
-                    <th className="sticky left-40 z-20 border-r border-card-border bg-muted px-3 py-2 text-center font-medium whitespace-nowrap">Pts</th>
+                    <th ref={nameColRef} className="sticky left-0 z-20 max-w-40 truncate bg-muted px-3 py-2 font-medium">Member</th>
+                    <th
+                      className="sticky z-20 border-r border-card-border bg-muted px-3 py-2 text-center font-medium whitespace-nowrap"
+                      style={{ left: nameColWidth }}
+                    >
+                      Pts
+                    </th>
                     {data.games.map((g) => (
                       <th key={g.id} className="px-3 py-2 text-center font-medium whitespace-nowrap">
                         <div>
@@ -142,10 +160,10 @@ export default function GridPage() {
                 </thead>
                 <tfoot>
                   <tr className="border-b-0 border-t border-card-border bg-muted/30 text-xs" data-testid="row-consensus">
-                    <td className="sticky left-0 z-20 w-40 truncate bg-muted px-3 py-2 font-medium text-muted-foreground whitespace-nowrap">
+                    <td className="sticky left-0 z-20 max-w-40 truncate bg-muted px-3 py-2 font-medium text-muted-foreground">
                       Consensus
                     </td>
-                    <td className="sticky left-40 z-20 border-r border-card-border bg-muted px-3 py-2" />
+                    <td className="sticky z-20 border-r border-card-border bg-muted px-3 py-2" style={{ left: nameColWidth }} />
                     {data.games.map((g) => {
                       const c = data.consensus[g.id];
                       if (!c || c.totalPicks === 0) {
@@ -190,15 +208,13 @@ export default function GridPage() {
                       )}
                       data-testid={`row-grid-${row.userId}`}
                     >
-                      <td
-                        className="sticky left-0 z-20 w-40 truncate bg-background px-3 py-2 font-medium"
-                        title={row.name}
-                      >
+                      <td className="sticky left-0 z-20 max-w-40 truncate bg-background px-3 py-2 font-medium" title={row.name}>
                         {row.name}
                         {row.userId === user?.id && <span className="ml-1.5 text-xs text-muted-foreground">(you)</span>}
                       </td>
                       <td
-                        className="sticky left-40 z-20 border-r border-card-border bg-background px-3 py-2 text-center font-semibold whitespace-nowrap"
+                        className="sticky z-20 border-r border-card-border bg-background px-3 py-2 text-center font-semibold whitespace-nowrap"
+                        style={{ left: nameColWidth }}
                         data-testid={`text-grid-points-${row.userId}`}
                       >
                         {row.weekPoints}
