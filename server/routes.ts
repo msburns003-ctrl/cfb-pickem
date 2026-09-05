@@ -409,6 +409,29 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const weekUpsetPicks = await storage.listUpsetPicksByWeek(weekId);
     const members = await storage.listUsers();
 
+    // Season-cumulative weekly pick'em points through and including this
+    // week (Cristo-Ball intentionally excluded — it's a separate
+    // season-long component). Powers the "Total Points" column shown in the
+    // grid PDF export.
+    const totalPointsByUser = new Map<number, number>();
+    for (const m of members) totalPointsByUser.set(m.id, 0);
+    if (week) {
+      const seasonWeeks = (await storage.listWeeks()).filter(
+        (w) => w.seasonYear === week.seasonYear && w.weekNumber <= week.weekNumber,
+      );
+      for (const w of seasonWeeks) {
+        const picks = w.id === weekId ? weekPicks : await storage.listPicksByWeek(w.id);
+        const upsets = w.id === weekId ? weekUpsetPicks : await storage.listUpsetPicksByWeek(w.id);
+        for (const p of picks) {
+          if (p.pointsEarned == null) continue;
+          totalPointsByUser.set(p.userId, (totalPointsByUser.get(p.userId) ?? 0) + p.pointsEarned);
+        }
+        for (const u of upsets) {
+          totalPointsByUser.set(u.userId, (totalPointsByUser.get(u.userId) ?? 0) + u.pointsEarned);
+        }
+      }
+    }
+
     const grid = members.map((m) => {
       const picksByGame: Record<number, { selectedTeam: string; isCorrect: boolean | null }> = {};
       for (const p of weekPicks) {
@@ -425,6 +448,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         userId: m.id,
         name: m.name,
         weekPoints,
+        totalPoints: totalPointsByUser.get(m.id) ?? 0,
         picks: picksByGame,
         upsetPick: upset
           ? {
