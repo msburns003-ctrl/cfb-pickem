@@ -52,8 +52,22 @@ function objectToSnake(obj: Record<string, any>): Record<string, any> {
 
 function assertNoError(error: any, context: string) {
   if (error) {
-    throw new Error(`Supabase error in ${context}: ${error.message}`);
+    // Postgrest errors carry message/details/hint/code; network-level errors
+    // sometimes arrive as a bare object without `.message`. Surface whatever
+    // is actually present instead of letting a missing `.message` render as
+    // the literal string "undefined" with no way to diagnose the failure.
+    const parts = [error.message, error.details, error.hint, error.code].filter(
+      (v) => v !== undefined && v !== null && v !== "",
+    );
+    const detail = parts.length > 0 ? parts.join(" | ") : JSON.stringify(error);
+    throw new Error(`Supabase error in ${context}: ${detail}`);
   }
+}
+
+function chunk<T>(arr: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+  return out;
 }
 
 export interface IStorage {
@@ -79,6 +93,7 @@ export interface IStorage {
   createGame(game: InsertGame): Promise<Game>;
   createGames(games: InsertGame[]): Promise<Game[]>;
   updateGame(id: number, fields: Partial<Game>): Promise<Game | undefined>;
+  batchUpdateGames(updates: Array<{ id: number } & Partial<Game>>): Promise<void>;
   deleteGame(id: number): Promise<void>;
 
   // picks
@@ -87,12 +102,14 @@ export interface IStorage {
   getPick(gameId: number, userId: number): Promise<Pick | undefined>;
   upsertPick(pick: InsertPick): Promise<Pick>;
   updatePick(id: number, fields: Partial<Pick>): Promise<Pick | undefined>;
+  batchUpdatePicks(updates: Array<{ id: number } & Partial<Pick>>): Promise<void>;
 
   // upset picks
   getUpsetPick(weekId: number, userId: number): Promise<UpsetPick | undefined>;
   listUpsetPicksByWeek(weekId: number): Promise<UpsetPick[]>;
   upsertUpsetPick(pick: InsertUpsetPick): Promise<UpsetPick>;
   updateUpsetPick(id: number, fields: Partial<UpsetPick>): Promise<UpsetPick | undefined>;
+  batchUpdateUpsetPicks(updates: Array<{ id: number } & Partial<UpsetPick>>): Promise<void>;
 
   // cristo-ball
   getCristoBallEntry(userId: number, seasonYear: number): Promise<CristoBallEntry | undefined>;
@@ -230,6 +247,33 @@ export class DatabaseStorage implements IStorage {
     assertNoError(error, "updateGame");
     return rowToCamel<Game>(data);
   }
+  /**
+   * Updates many games in a handful of round-trips instead of one request per
+   * row. Supabase's bulk `upsert` is implemented as `INSERT ... ON CONFLICT
+   * DO UPDATE`, and Postgres validates NOT NULL constraints on the proposed
+   * row before it even checks for a conflict — so upserting a bare `{id,
+   * ...changedFields}` row fails with a not-null violation on every column
+   * that was left out, even though the row already exists. To upsert safely
+   * with a genuinely partial update, each chunk first re-fetches the current
+   * rows for the ids in play and merges the requested changes on top before
+   * sending the upsert, so every row in the payload is always complete.
+   */
+  async batchUpdateGames(updates: Array<{ id: number } & Partial<Game>>): Promise<void> {
+    if (updates.length === 0) return;
+    for (const group of chunk(updates, 200)) {
+      const ids = group.map((u) => u.id);
+      const { data: existingRows, error: fetchError } = await supabase.from("games").select("*").in("id", ids);
+      assertNoError(fetchError, "batchUpdateGames(fetch existing)");
+      const existingById = new Map(rowsToCamel<Game>(existingRows).map((g) => [g.id, g]));
+      const payload = group.map((u) => {
+        const existing = existingById.get(u.id);
+        if (!existing) throw new Error(`batchUpdateGames: game id ${u.id} not found`);
+        return objectToSnake({ ...existing, ...u });
+      });
+      const { error } = await supabase.from("games").upsert(payload, { onConflict: "id" });
+      assertNoError(error, "batchUpdateGames");
+    }
+  }
   async deleteGame(id: number): Promise<void> {
     const { error } = await supabase.from("games").delete().eq("id", id);
     assertNoError(error, "deleteGame");
@@ -287,6 +331,29 @@ export class DatabaseStorage implements IStorage {
     assertNoError(error, "updatePick");
     return rowToCamel<Pick>(data);
   }
+  /**
+   * Updates many picks in as few round-trips as possible: each chunk is sent
+   * as a single upsert request (matched on the existing primary key, so it
+   * behaves as a bulk UPDATE, not an insert) instead of one request per row.
+   * Used by grading so a whole week's worth of picks can be scored in a
+   * handful of database calls rather than hundreds of sequential ones.
+   */
+  async batchUpdatePicks(updates: Array<{ id: number } & Partial<Pick>>): Promise<void> {
+    if (updates.length === 0) return;
+    for (const group of chunk(updates, 200)) {
+      const ids = group.map((u) => u.id);
+      const { data: existingRows, error: fetchError } = await supabase.from("picks").select("*").in("id", ids);
+      assertNoError(fetchError, "batchUpdatePicks(fetch existing)");
+      const existingById = new Map(rowsToCamel<Pick>(existingRows).map((p) => [p.id, p]));
+      const payload = group.map((u) => {
+        const existing = existingById.get(u.id);
+        if (!existing) throw new Error(`batchUpdatePicks: pick id ${u.id} not found`);
+        return objectToSnake({ ...existing, ...u });
+      });
+      const { error } = await supabase.from("picks").upsert(payload, { onConflict: "id" });
+      assertNoError(error, "batchUpdatePicks");
+    }
+  }
 
   // ---------- upset picks ----------
   async getUpsetPick(weekId: number, userId: number): Promise<UpsetPick | undefined> {
@@ -337,6 +404,22 @@ export class DatabaseStorage implements IStorage {
       .maybeSingle();
     assertNoError(error, "updateUpsetPick");
     return rowToCamel<UpsetPick>(data);
+  }
+  async batchUpdateUpsetPicks(updates: Array<{ id: number } & Partial<UpsetPick>>): Promise<void> {
+    if (updates.length === 0) return;
+    for (const group of chunk(updates, 200)) {
+      const ids = group.map((u) => u.id);
+      const { data: existingRows, error: fetchError } = await supabase.from("upset_picks").select("*").in("id", ids);
+      assertNoError(fetchError, "batchUpdateUpsetPicks(fetch existing)");
+      const existingById = new Map(rowsToCamel<UpsetPick>(existingRows).map((p) => [p.id, p]));
+      const payload = group.map((u) => {
+        const existing = existingById.get(u.id);
+        if (!existing) throw new Error(`batchUpdateUpsetPicks: upset pick id ${u.id} not found`);
+        return objectToSnake({ ...existing, ...u });
+      });
+      const { error } = await supabase.from("upset_picks").upsert(payload, { onConflict: "id" });
+      assertNoError(error, "batchUpdateUpsetPicks");
+    }
   }
 
   // ---------- cristo-ball ----------

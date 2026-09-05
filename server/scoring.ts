@@ -3,6 +3,8 @@ import { invalidate, prefixes } from "./cache";
 import type {
   Game,
   Week,
+  Pick,
+  UpsetPick,
   CristoBallEntry,
   CristoBallResults,
   CristoBallPointsBreakdown,
@@ -144,9 +146,24 @@ export async function gradeCompletedGames(weekId: number): Promise<GradeComplete
 
   const weekPicks = await storage.listPicksByWeek(weekId);
 
+  // Compute every write in memory first, then send them as a small number of
+  // batched database calls (one upsert per table, chunked at 200 rows) instead
+  // of one request per game/pick. A whole week's grading — potentially
+  // hundreds of picks — used to mean hundreds of sequential round-trips,
+  // where a single transient failure partway through left the week
+  // half-graded with no easy way to tell where it stopped. Batching collapses
+  // that to a handful of calls, so there's far less exposure to any one
+  // hiccup, and a failure is all-or-nothing per table rather than silently
+  // partial.
+  const gameUpdates: Array<{ id: number } & Partial<Game>> = [];
+  const pickUpdates: Array<{ id: number } & Partial<Pick>> = [];
+
   for (const game of finalGames) {
     const result = gradeGameOutcome(game);
-    await storage.updateGame(game.id, { winner: result.winner ?? undefined, atsResult: result.atsResult });
+    // Use an explicit `null` (never `undefined`) here: the batch upsert sends
+    // a fully-merged row per id, and every row in one upsert call must carry
+    // the same explicit keys for `winner` to be applied consistently.
+    gameUpdates.push({ id: game.id, winner: result.winner ?? null, atsResult: result.atsResult });
 
     const gamePicks = weekPicks.filter((p) => p.gameId === game.id);
     const isMoneyGame = game.isMoneyGame;
@@ -162,12 +179,16 @@ export async function gradeCompletedGames(weekId: number): Promise<GradeComplete
         isCorrect = pick.selectedTeam === coveringTeam;
       }
       const pointsEarned = isCorrect ? (isMoneyGame ? 2 : 1) : 0;
-      await storage.updatePick(pick.id, { isCorrect, pointsEarned });
+      pickUpdates.push({ id: pick.id, isCorrect, pointsEarned });
     }
   }
 
+  await storage.batchUpdateGames(gameUpdates);
+  await storage.batchUpdatePicks(pickUpdates);
+
   // Grade any bonus upset pick whose underlying game is now final.
   const weekUpsetPicks = await storage.listUpsetPicksByWeek(weekId);
+  const upsetUpdates: Array<{ id: number } & Partial<UpsetPick>> = [];
   for (const up of weekUpsetPicks) {
     const game = allGames.find((g) => g.id === up.gameId);
     if (!game || game.status !== "final" || game.awayScore == null || game.homeScore == null) continue;
@@ -182,8 +203,9 @@ export async function gradeCompletedGames(weekId: number): Promise<GradeComplete
     } else {
       outcome = "loss";
     }
-    await storage.updateUpsetPick(up.id, { result: outcome, pointsEarned });
+    upsetUpdates.push({ id: up.id, result: outcome, pointsEarned });
   }
+  await storage.batchUpdateUpsetPicks(upsetUpdates);
 
   const weekFullyGraded = pendingGames.length === 0;
   if (weekFullyGraded && week.status !== "graded") {
