@@ -27,6 +27,10 @@ interface AdminWeekResponse {
 
 const emptyGameForm = { awayTeam: "", homeTeam: "", favoriteTeam: "", spread: "", kickoff: "", broadcast: "" };
 
+function teamLabel(team: string, rank: number | null) {
+  return rank ? `#${rank} ${team}` : team;
+}
+
 type SubmissionStatus = "none" | "partial" | "complete" | "empty";
 
 function submissionStatus(submitted: number, total: number): SubmissionStatus {
@@ -396,7 +400,7 @@ export default function AdminWeekDetailPage() {
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
                     <p className="text-sm font-medium">
-                      {game.awayTeam} @ {game.homeTeam}
+                      {teamLabel(game.awayTeam, game.awayRank)} @ {teamLabel(game.homeTeam, game.homeRank)}
                     </p>
                     <p className="text-xs text-muted-foreground">
                       {game.favoriteTeam} -{game.spread} · {game.pickType} ·{" "}
