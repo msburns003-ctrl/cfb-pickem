@@ -6,6 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { LayoutGrid, Lock, TrendingUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth";
+import { formatEastern } from "@/lib/time";
 import type { Game, Week } from "@shared/schema";
 
 interface GridRow {
@@ -147,7 +148,7 @@ export default function GridPage() {
                         </div>
                         <div className="mt-0.5 text-[10px] font-normal text-muted-foreground/80">
                           {g.favoriteTeam === g.awayTeam ? "-" : "+"}
-                          {g.spread}
+                          {g.spread} · {formatEastern(g.kickoff, { weekday: "short", hour: "numeric", minute: "2-digit" })}
                         </div>
                       </th>
                     ))}
