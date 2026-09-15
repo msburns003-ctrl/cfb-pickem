@@ -407,7 +407,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const selectedGames = allGames.filter((g) => g.isSelected);
     const weekPicks = await storage.listPicksByWeek(weekId);
     const weekUpsetPicks = await storage.listUpsetPicksByWeek(weekId);
-    const members = await storage.listUsers();
+    // Booted/bought-out members are excluded from the grid itself (and its
+    // PDF export, which reads this same payload) but keep everything else
+    // about them intact — standings, login, and their underlying picks rows
+    // are untouched. Consensus % below is computed straight from weekPicks,
+    // not from this filtered list, so it still reflects every pick actually
+    // submitted.
+    const members = (await storage.listUsers()).filter((m) => !m.hiddenFromGrid);
 
     // Season-cumulative weekly pick'em points through and including this
     // week (Cristo-Ball intentionally excluded — it's a separate
@@ -512,7 +518,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.patch("/api/admin/members/:id", requireAdmin, async (req, res) => {
-    const schema = z.object({ name: z.string().min(1).optional(), email: z.string().email().optional(), isAdmin: z.boolean().optional() });
+    const schema = z.object({
+      name: z.string().min(1).optional(),
+      email: z.string().email().optional(),
+      isAdmin: z.boolean().optional(),
+      hiddenFromGrid: z.boolean().optional(),
+    });
     const parsed = schema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: "Invalid fields" });
     const updated = await storage.updateUser(Number(req.params.id), parsed.data);

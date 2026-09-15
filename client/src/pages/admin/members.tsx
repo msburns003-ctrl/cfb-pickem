@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, KeyRound, Trash2, Pencil } from "lucide-react";
@@ -62,6 +63,19 @@ export default function AdminMembersPage() {
     onError: (err) => toast({ title: "Couldn't update name", description: err instanceof Error ? err.message : undefined, variant: "destructive" }),
   });
 
+  // Booted / bought-out members: hides them from the weekly picks grid (and
+  // its PDF export) while leaving standings, login, and their historical
+  // picks untouched.
+  const gridVisibilityMutation = useMutation({
+    mutationFn: async ({ id, hiddenFromGrid }: { id: number; hiddenFromGrid: boolean }) => {
+      const res = await apiRequest("PATCH", `/api/admin/members/${id}`, { hiddenFromGrid });
+      return res.json();
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/admin/members"] }),
+    onError: (err) =>
+      toast({ title: "Couldn't update grid visibility", description: err instanceof Error ? err.message : undefined, variant: "destructive" }),
+  });
+
   const members = data?.members ?? [];
 
   return (
@@ -113,10 +127,28 @@ export default function AdminMembersPage() {
             <div>
               <p className="font-medium">
                 {m.name} {m.isAdmin && <Badge variant="outline" className="ml-1 text-[10px]">Admin</Badge>}
+                {m.hiddenFromGrid && (
+                  <Badge variant="secondary" className="ml-1 text-[10px]">
+                    Hidden from grid
+                  </Badge>
+                )}
               </p>
               <p className="text-xs text-muted-foreground">{m.email}</p>
             </div>
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-3">
+              <div
+                className="flex items-center gap-1.5"
+                title="Excludes this member from the weekly picks grid and its PDF export. Standings and their login are unaffected."
+              >
+                <Switch
+                  checked={m.hiddenFromGrid}
+                  onCheckedChange={(checked) => gridVisibilityMutation.mutate({ id: m.id, hiddenFromGrid: checked })}
+                  disabled={gridVisibilityMutation.isPending}
+                  data-testid={`switch-hide-grid-${m.id}`}
+                />
+                <span className="text-xs text-muted-foreground whitespace-nowrap">Hide from grid</span>
+              </div>
+              <div className="flex items-center gap-1">
               <Button
                 variant="ghost"
                 size="icon"
@@ -145,6 +177,7 @@ export default function AdminMembersPage() {
                   <Trash2 className="h-4 w-4" />
                 </Button>
               )}
+              </div>
             </div>
           </div>
         ))}

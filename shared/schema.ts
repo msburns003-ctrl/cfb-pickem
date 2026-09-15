@@ -9,6 +9,11 @@ export interface User {
   isAdmin: boolean;
   authToken: string | null;
   mustChangePassword: boolean;
+  // Booted/bought-out members: excluded from the weekly picks grid (and its
+  // PDF export) so their empty/inactive row doesn't clutter that week's
+  // comparison. They still appear in season standings and can still log in
+  // to view their own history — this flag only affects that one view.
+  hiddenFromGrid: boolean;
 }
 
 export const insertUserSchema = z.object({
@@ -16,6 +21,7 @@ export const insertUserSchema = z.object({
   email: z.string().email(),
   passwordHash: z.string().min(1),
   isAdmin: z.boolean().optional(),
+  hiddenFromGrid: z.boolean().optional(),
 });
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type PublicUser = Omit<User, "passwordHash" | "authToken">;
