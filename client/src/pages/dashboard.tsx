@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { useNow } from "@/hooks/use-now";
 import { useLiveScores } from "@/hooks/use-live-scores";
+import { setUnsavedChanges } from "@/lib/app-refresh";
 import { tallyWeek } from "@/lib/projection";
 import { WeekSummary, type SeasonStanding } from "@/components/WeekSummary";
 import { InstallAppBanner } from "@/components/InstallAppCard";
@@ -334,6 +335,12 @@ export default function DashboardPage() {
     [localPicks, picksByGame, data, now],
   );
   const unsavedCount = unsavedGameIds.length;
+
+  // Tell the return-to-app reload not to discard unsaved picks.
+  useEffect(() => {
+    setUnsavedChanges(unsavedCount > 0);
+    return () => setUnsavedChanges(false);
+  }, [unsavedCount]);
 
   useEffect(() => {
     if (unsavedCount === 0) return;

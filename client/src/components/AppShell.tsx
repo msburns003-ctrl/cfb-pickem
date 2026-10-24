@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Trophy, ListChecks, ShieldCheck, LogOut, User, LayoutGrid, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { RefreshButton } from "@/components/RefreshButton";
+import { PullToRefresh } from "@/components/PullToRefresh";
 
 function Logo() {
   return (
@@ -42,6 +44,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="min-h-screen bg-background">
+      <PullToRefresh />
       <header className="sticky top-0 z-40 border-b border-border bg-sidebar pt-[env(safe-area-inset-top)] text-sidebar-foreground">
         <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-4 py-3">
           <Link href="/dashboard" className="flex items-center gap-2 shrink-0">
@@ -83,6 +86,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               <User className="h-4 w-4" />
               <span>{user?.name?.split(" ")[0]}</span>
             </Link>
+            <RefreshButton className="text-sidebar-foreground/70 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground" />
             <ThemeToggle className="text-sidebar-foreground/70 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground" />
             <Button
               variant="ghost"

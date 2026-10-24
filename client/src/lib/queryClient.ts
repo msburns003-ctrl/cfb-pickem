@@ -77,8 +77,9 @@ export const getQueryFn: <T>(options: {
 //     cache absorbs it.
 //   - refetchOnWindowFocus stays FALSE: users flip to ESPN and back
 //     constantly on game day; auto-refetching every focus is noisy and
-//     wastes bandwidth. Users can pull-to-refresh / hard-refresh if
-//     they want fresh data immediately.
+//     wastes bandwidth. Coming back after a longer absence refetches (or
+//     reloads) via lib/app-refresh.ts, and the home-screen app, which has
+//     no pull-to-refresh, gets a refresh button in the header.
 //   - refetchOnReconnect TRUE: if a user's phone drops WiFi and comes
 //     back, refetch once so they don't stare at stale data.
 //   - retry 1 for queries: one network hiccup shouldn't surface as an
