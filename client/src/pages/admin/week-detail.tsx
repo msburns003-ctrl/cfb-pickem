@@ -13,7 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { useToast } from "@/hooks/use-toast";
 import { useNow } from "@/hooks/use-now";
 import { useLiveScores } from "@/hooks/use-live-scores";
-import { ArrowLeft, Plus, Trash2, Trophy, DollarSign, RefreshCw, Download } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, Trophy, DollarSign, RefreshCw, Download, CloudDownload } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ShareUpdateCard } from "@/components/ShareUpdateCard";
 import { formatEastern, isoToEasternInputValue, easternInputValueToIso } from "@/lib/time";
@@ -171,6 +171,34 @@ export default function AdminWeekDetailPage() {
         description: err instanceof Error ? err.message : "The grid isn't available yet.",
         variant: "destructive",
       }),
+  });
+
+  const [noLineGames, setNoLineGames] = useState<{ awayTeam: string; homeTeam: string; kickoff: string }[]>([]);
+  const importEspnMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/admin/weeks/${weekId}/games/import-espn`);
+      return (await res.json()) as {
+        added: number;
+        refreshed: number;
+        lockedByPicks: number;
+        noLine: { awayTeam: string; homeTeam: string; kickoff: string }[];
+        totalFromEspn: number;
+      };
+    },
+    onSuccess: (result) => {
+      invalidate();
+      setNoLineGames(result.noLine);
+      const parts: string[] = [];
+      if (result.added) parts.push(`${result.added} added`);
+      if (result.refreshed) parts.push(`${result.refreshed} line${result.refreshed === 1 ? "" : "s"} updated`);
+      if (result.lockedByPicks) parts.push(`${result.lockedByPicks} kept as-is (already picked)`);
+      if (result.noLine.length) parts.push(`${result.noLine.length} without a line yet`);
+      toast({
+        title: result.totalFromEspn === 0 ? "ESPN has no games for this week" : "Games imported from ESPN",
+        description: parts.length ? parts.join(" · ") : result.totalFromEspn > 0 ? "Everything is already up to date." : "Check the pick deadline is in the right week.",
+      });
+    },
+    onError: (err) => toast({ title: "Couldn't import games", description: err instanceof Error ? err.message : undefined, variant: "destructive" }),
   });
 
   const checkGamesMutation = useMutation({
@@ -347,6 +375,17 @@ export default function AdminWeekDetailPage() {
           <Button
             size="sm"
             variant="outline"
+            onClick={() => importEspnMutation.mutate()}
+            disabled={importEspnMutation.isPending}
+            title="Add this week's FBS games and betting lines from ESPN. Lines on games nobody has picked yet are refreshed."
+            data-testid="button-import-espn"
+          >
+            <CloudDownload className="h-4 w-4" />
+            {importEspnMutation.isPending ? "Importing..." : "Import from ESPN"}
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
             onClick={() => checkGamesMutation.mutate()}
             disabled={checkGamesMutation.isPending || games.every((g) => g.status === "final")}
             data-testid="button-check-games"
@@ -407,7 +446,7 @@ export default function AdminWeekDetailPage() {
           <p className="text-xs text-muted-foreground" data-testid="text-auto-grade-status">
             {autoGrade.enabled ? (
               <>
-                Automatic scoring is on: final scores are saved from ESPN and graded every 5 minutes once picks lock.
+                Automatic scoring is on: final scores are saved from ESPN and graded every 5 minutes once picks lock. When the latest week is fully graded, the next week is created in Setup with ESPN's games.
                 {autoGrade.status &&
                   (autoGrade.status.error
                     ? ` Last run ${formatEastern(autoGrade.status.lastRunAt, { hour: "numeric", minute: "2-digit" })} failed: ${autoGrade.status.error}. Use the buttons to score manually.`
@@ -417,6 +456,17 @@ export default function AdminWeekDetailPage() {
               "Automatic scoring is off. Use Check Games and Grade to score this week."
             )}
           </p>
+          {noLineGames.length > 0 && (
+            <div className="rounded-md bg-muted px-3 py-2 text-sm" data-testid="text-no-line-games">
+              <p className="font-medium">No betting line on ESPN yet, so not added:</p>
+              <p className="mt-1 text-muted-foreground">
+                {noLineGames
+                  .map((g) => `${g.awayTeam} @ ${g.homeTeam} (${formatEastern(g.kickoff, { weekday: "short", hour: "numeric", minute: "2-digit" })})`)
+                  .join(" · ")}
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">Import again later to pick up new lines, or use Add Game to enter one.</p>
+            </div>
+          )}
           {espnFinalCount > 0 && (
             <p className="rounded-md bg-muted px-3 py-2 text-sm" data-testid="text-espn-final-hint">
               ESPN shows {espnFinalCount} selected game{espnFinalCount === 1 ? "" : "s"} as final.{" "}

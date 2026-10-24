@@ -2,7 +2,7 @@ import type { Game, LiveScore, LiveScoresResponse } from "@shared/schema";
 import { storage } from "./storage";
 
 // ---------- ESPN public scoreboard types (subset of fields we use) ----------
-interface EspnTeam {
+export interface EspnTeam {
   location?: string;
   name?: string;
   displayName?: string;
@@ -10,17 +10,31 @@ interface EspnTeam {
   abbreviation?: string;
 }
 
-interface EspnCompetitor {
+export interface EspnCompetitor {
   homeAway: "home" | "away";
   score?: string;
   team: EspnTeam;
+  curatedRank?: { current?: number }; // 99 = unranked
 }
 
-interface EspnEvent {
+export interface EspnOdds {
+  details?: string; // e.g. "UGA -7.5" or "EVEN"
+  spread?: number;
+  homeTeamOdds?: { favorite?: boolean };
+  awayTeamOdds?: { favorite?: boolean };
+}
+
+export interface EspnCompetition {
+  competitors: EspnCompetitor[];
+  odds?: EspnOdds[];
+  broadcasts?: { names?: string[] }[];
+}
+
+export interface EspnEvent {
   id: string;
   date: string;
   status?: { type?: { completed?: boolean; state?: string; name?: string; shortDetail?: string } };
-  competitions?: { competitors: EspnCompetitor[] }[];
+  competitions?: EspnCompetition[];
 }
 
 interface EspnScoreboardResponse {
@@ -29,7 +43,7 @@ interface EspnScoreboardResponse {
 
 const ESPN_SCOREBOARD_URL = "https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard";
 
-function dateStrFromDate(d: Date): string {
+export function dateStrFromDate(d: Date): string {
   const y = d.getUTCFullYear();
   const m = String(d.getUTCMonth() + 1).padStart(2, "0");
   const day = String(d.getUTCDate()).padStart(2, "0");
@@ -51,8 +65,9 @@ function espnDateCandidates(iso: string): string[] {
   return primary === shifted ? [primary] : [primary, shifted];
 }
 
-async function fetchEspnScoreboardByDate(dateStr: string): Promise<EspnEvent[]> {
-  const url = `${ESPN_SCOREBOARD_URL}?dates=${dateStr}&limit=500`;
+// `groups=80` asks for every FBS game rather than ESPN's default featured set.
+export async function fetchEspnScoreboardByDate(dateStr: string, groups?: string): Promise<EspnEvent[]> {
+  const url = `${ESPN_SCOREBOARD_URL}?dates=${dateStr}&limit=500${groups ? `&groups=${groups}` : ""}`;
   try {
     // Time out rather than hang a request when ESPN is slow.
     const res = await fetch(url, { signal: AbortSignal.timeout(10_000) });
@@ -126,7 +141,7 @@ interface MatchedEvent {
   swapped: boolean;
 }
 
-function findMatchingEvent(game: Game, events: EspnEvent[]): MatchedEvent | undefined {
+export function findMatchingEvent(game: Pick<Game, "homeTeam" | "awayTeam">, events: EspnEvent[]): MatchedEvent | undefined {
   for (const event of events) {
     const comp = event.competitions?.[0];
     if (!comp) continue;
