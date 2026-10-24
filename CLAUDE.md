@@ -42,8 +42,11 @@ client/src/
   App.tsx               routes
   lib/queryClient.ts    fetch wrapper; API_BASE uses the "__PORT_5000__" placeholder
   lib/auth.tsx          auth context (session lives in an httpOnly cookie only)
+  lib/theme.tsx         dark mode (choice kept in the __Host-theme cookie)
+  lib/projection.ts     live pick status and projected points
   lib/grid-pdf.ts       weekly grid PDF export
-  pages/                dashboard, grid, standings, cristoball, profile, login
+  pages/                dashboard, grid, standings, stats, cristoball, profile, login
+client/public/          app icons, favicon, web app manifest (home-screen install; no service worker)
   pages/admin/          weeks, week-detail, members, cristoball admin
 server/
   index.ts              Express entry
@@ -79,7 +82,7 @@ League rules (already decided, do not change without the commissioner's approval
 
 Security rules:
 
-- **No `localStorage`, `sessionStorage`, or `indexedDB` anywhere in the client bundle.** The session lives in an httpOnly cookie only.
+- **No `localStorage`, `sessionStorage`, or `indexedDB` anywhere in the client bundle.** The session lives in an httpOnly cookie only. Small per-device preferences (like the theme) use a `__Host-` cookie instead. No service worker or Cache Storage.
 - **Cookie names must use the `__Host-` prefix** (`Secure`, `Path=/`, no `Domain`). The pplx.app proxy drops any other cookie name.
 - **Never commit secrets**: no passwords, API keys, Supabase keys, or member credential files. `.env`, `*.db` files, and `league_members_temp_passwords.csv` are git-ignored; keep it that way.
 - Passwords are hashed with scrypt in `salt:hash` format (`server/auth.ts`). Never log or return password hashes or session tokens.
