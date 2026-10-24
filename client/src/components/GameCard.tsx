@@ -3,11 +3,17 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { formatEastern } from "@/lib/time";
 import { Tv, Check, X, Coins } from "lucide-react";
-import type { Game, Pick } from "@shared/schema";
+import type { Game, LiveScore, Pick } from "@shared/schema";
+import { livePickStatus, type LivePickStatus } from "@shared/outcome";
 
 function teamLabel(team: string, rank: number | null) {
   return rank ? `#${rank} ${team}` : team;
 }
+
+const LIVE_STATUS_TEXT: Record<"SU" | "ATS", Record<LivePickStatus, string>> = {
+  SU: { winning: "winning", losing: "losing", even: "tied" },
+  ATS: { winning: "covering", losing: "not covering", even: "right on the spread" },
+};
 
 function formatKickoff(iso: string) {
   return formatEastern(iso, { weekday: "short", hour: "numeric", minute: "2-digit" });
@@ -21,10 +27,12 @@ interface GameCardProps {
   locked: boolean;
   // True when this game has started but the rest of the week is still open.
   kickedOff?: boolean;
+  // Unofficial ESPN score while the game is in progress or awaiting grading.
+  live?: LiveScore;
   onSelect?: (selectedTeam: string) => void;
 }
 
-export function GameCard({ game, pick, selectedTeam, unsaved, locked, kickedOff, onSelect }: GameCardProps) {
+export function GameCard({ game, pick, selectedTeam, unsaved, locked, kickedOff, live, onSelect }: GameCardProps) {
   const isFavoriteAway = game.favoriteTeam === game.awayTeam;
   // Always show the spread as reference info, even for straight-up games —
   // it just isn't the basis for grading unless pickType is "ATS".
@@ -33,12 +41,21 @@ export function GameCard({ game, pick, selectedTeam, unsaved, locked, kickedOff,
 
   const graded = game.status === "final" && pick?.pointsEarned != null;
 
+  // Before grading, show the saved final score if there is one, else ESPN's.
+  const score: LiveScore | undefined = graded
+    ? undefined
+    : game.status === "final" && game.awayScore != null && game.homeScore != null
+      ? { state: "post", awayScore: game.awayScore, homeScore: game.homeScore, detail: "Final" }
+      : live;
+  const pickStatus =
+    score && selectedTeam && !unsaved ? livePickStatus(game, selectedTeam, score.awayScore, score.homeScore) : null;
+
   return (
     <div className="rounded-lg border border-card-border bg-card p-4" data-testid={`card-game-${game.id}`}>
       <div className="mb-3 flex items-center justify-between gap-2 text-xs text-muted-foreground">
         <span>
           {formatKickoff(game.kickoff)}
-          {kickedOff && !graded && (
+          {kickedOff && !graded && !score && (
             <span className="ml-1.5 font-medium" data-testid={`text-kicked-off-${game.id}`}>
               · Kicked off, locked
             </span>
@@ -106,10 +123,42 @@ export function GameCard({ game, pick, selectedTeam, unsaved, locked, kickedOff,
         </div>
       )}
 
+      {score && (
+        <div className="mt-3 flex flex-col gap-1 text-sm" data-testid={`text-live-score-${game.id}`}>
+          <div className="flex flex-wrap items-center gap-x-1.5">
+            {score.state === "in" ? (
+              <span className="flex items-center gap-1 text-xs font-semibold uppercase text-destructive">
+                <span className="h-2 w-2 animate-pulse rounded-full bg-destructive" /> Live
+              </span>
+            ) : (
+              <span className="text-xs font-semibold uppercase text-muted-foreground">Final</span>
+            )}
+            <span className="font-medium">
+              {game.awayTeam} {score.awayScore} – {game.homeTeam} {score.homeScore}
+            </span>
+            {score.state === "in" && <span className="text-xs text-muted-foreground">· {score.detail}</span>}
+          </div>
+          {pickStatus && selectedTeam && (
+            <span
+              className={cn(
+                "text-xs font-medium",
+                pickStatus === "winning" && "text-primary",
+                pickStatus === "losing" && "text-destructive",
+                pickStatus === "even" && "text-muted-foreground",
+              )}
+              data-testid={`text-live-pick-status-${game.id}`}
+            >
+              Your pick, {selectedTeam}, is {LIVE_STATUS_TEXT[game.pickType][pickStatus]}
+              {score.state === "post" && " · unofficial until the week is graded"}
+            </span>
+          )}
+        </div>
+      )}
+
       {!graded && kickedOff && !selectedTeam && (
         <p className="mt-3 text-xs text-muted-foreground">No pick made before kickoff.</p>
       )}
-      {!graded && selectedTeam && (
+      {!graded && selectedTeam && !pickStatus && (
         <p className={cn("mt-3 text-xs", unsaved ? "font-medium text-accent" : "text-muted-foreground")}>
           {unsaved ? `${selectedTeam} selected \u2014 not saved yet` : `You picked ${selectedTeam}.`}
         </p>

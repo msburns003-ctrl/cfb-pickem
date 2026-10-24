@@ -18,6 +18,7 @@ import {
   CRISTO_BALL_HEISMAN_POINTS,
   CRISTO_BALL_PLAYOFF_TEAM_POINTS,
 } from "@shared/schema";
+import { outcomeFromScores, coveringTeam } from "@shared/outcome";
 
 export const ATS_THRESHOLD = 5.5; // spread magnitude above which a pick is ATS instead of straight-up
 
@@ -32,23 +33,7 @@ export function gradeGameOutcome(game: Game) {
   if (game.awayScore == null || game.homeScore == null) {
     throw new Error("Game is missing final score");
   }
-  const winner = game.awayScore > game.homeScore ? game.awayTeam : game.homeScore > game.awayScore ? game.homeTeam : null; // null = tie (rare in CFB, treat as push-ish)
-
-  const favoriteIsAway = game.favoriteTeam === game.awayTeam;
-  const favoriteScore = favoriteIsAway ? game.awayScore : game.homeScore;
-  const underdogScore = favoriteIsAway ? game.homeScore : game.awayScore;
-  const favoriteMargin = favoriteScore - underdogScore;
-
-  let atsResult: "favorite" | "underdog" | "push";
-  if (favoriteMargin === game.spread) {
-    atsResult = "push";
-  } else if (favoriteMargin > game.spread) {
-    atsResult = "favorite";
-  } else {
-    atsResult = "underdog";
-  }
-
-  return { winner, atsResult };
+  return outcomeFromScores(game, game.awayScore, game.homeScore);
 }
 
 /**
@@ -175,8 +160,7 @@ export async function gradeCompletedGames(weekId: number): Promise<GradeComplete
         isCorrect = pick.selectedTeam === result.winner;
       } else {
         // ATS: correct if you picked the side that covered
-        const coveringTeam = result.atsResult === "favorite" ? game.favoriteTeam : game.awayTeam === game.favoriteTeam ? game.homeTeam : game.awayTeam;
-        isCorrect = pick.selectedTeam === coveringTeam;
+        isCorrect = pick.selectedTeam === coveringTeam(game, result.atsResult);
       }
       const pointsEarned = isCorrect ? (isMoneyGame ? 2 : 1) : 0;
       pickUpdates.push({ id: pick.id, isCorrect, pointsEarned });

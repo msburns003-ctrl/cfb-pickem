@@ -15,7 +15,7 @@ import {
   gradeCristoBallEntry,
 } from "./scoring";
 import { insertWeekSchema, type InsertWeek, insertCristoBallEntrySchema, insertCristoBallResultsSchema, insertCristoBallLockDeadlineSchema } from "@shared/schema";
-import { checkGamesForWeek } from "./scores";
+import { checkGamesForWeek, getLiveScoresForWeek } from "./scores";
 import { z } from "zod";
 import { cached, invalidate, keys, prefixes, cacheStats } from "./cache";
 
@@ -385,6 +385,23 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
     const graded = await storage.markCristoBallGraded(seasonYear, new Date().toISOString());
     res.json({ results: graded, gradedCount: entries.length });
+  });
+
+  // ---------------- LIVE SCORES ----------------
+  // Read-only scores from ESPN for games in progress. Cached for 60s, so the
+  // whole league polling on game day costs at most one ESPN round per minute
+  // per week. Nothing is written to the database.
+  app.get("/api/weeks/:id/live-scores", requireAuth, async (req, res) => {
+    const weekId = Number(req.params.id);
+    if (!Number.isInteger(weekId) || weekId <= 0) return res.status(400).json({ message: "Invalid week" });
+    const week = await storage.getWeek(weekId);
+    if (!week) return res.status(404).json({ message: "Week not found" });
+    try {
+      const payload = await cached(keys.liveScores(weekId), 60_000, () => getLiveScoresForWeek(weekId));
+      res.json(payload);
+    } catch {
+      res.status(502).json({ message: "Live scores are unavailable right now" });
+    }
   });
 
   // ---------------- PICKS GRID ----------------

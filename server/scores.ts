@@ -1,4 +1,4 @@
-import type { Game } from "@shared/schema";
+import type { Game, LiveScore, LiveScoresResponse } from "@shared/schema";
 import { storage } from "./storage";
 
 // ---------- ESPN public scoreboard types (subset of fields we use) ----------
@@ -19,7 +19,7 @@ interface EspnCompetitor {
 interface EspnEvent {
   id: string;
   date: string;
-  status?: { type?: { completed?: boolean; state?: string; name?: string } };
+  status?: { type?: { completed?: boolean; state?: string; name?: string; shortDetail?: string } };
   competitions?: { competitors: EspnCompetitor[] }[];
 }
 
@@ -54,7 +54,8 @@ function espnDateCandidates(iso: string): string[] {
 async function fetchEspnScoreboardByDate(dateStr: string): Promise<EspnEvent[]> {
   const url = `${ESPN_SCOREBOARD_URL}?dates=${dateStr}&limit=500`;
   try {
-    const res = await fetch(url);
+    // Time out rather than hang a request when ESPN is slow.
+    const res = await fetch(url, { signal: AbortSignal.timeout(10_000) });
     if (!res.ok) return [];
     const data = (await res.json()) as EspnScoreboardResponse;
     return data.events ?? [];
@@ -145,6 +146,30 @@ function findMatchingEvent(game: Game, events: EspnEvent[]): MatchedEvent | unde
   return undefined;
 }
 
+/** Our away/home scores for a matched event, or null if ESPN's are missing. */
+function matchScores(match: MatchedEvent): { awayScore: number; homeScore: number } | null {
+  const comp = match.event.competitions?.[0];
+  const homeComp = comp?.competitors.find((c) => c.homeAway === "home");
+  const awayComp = comp?.competitors.find((c) => c.homeAway === "away");
+
+  // If our home/away is flipped relative to ESPN's, swap which competitor's
+  // score maps to our homeScore/awayScore fields.
+  const ourHomeComp = match.swapped ? awayComp : homeComp;
+  const ourAwayComp = match.swapped ? homeComp : awayComp;
+
+  const homeScore = ourHomeComp?.score != null ? Number(ourHomeComp.score) : NaN;
+  const awayScore = ourAwayComp?.score != null ? Number(ourAwayComp.score) : NaN;
+
+  if (Number.isNaN(homeScore) || Number.isNaN(awayScore)) return null;
+  return { awayScore, homeScore };
+}
+
+async function fetchEventsForGames(games: Game[]): Promise<EspnEvent[]> {
+  const uniqueDates = Array.from(new Set(games.flatMap((g) => espnDateCandidates(g.kickoff))));
+  const eventsByDate = await Promise.all(uniqueDates.map((d) => fetchEspnScoreboardByDate(d)));
+  return eventsByDate.flat();
+}
+
 export interface CheckGamesResult {
   updated: Game[];
   stillScheduled: Game[];
@@ -166,9 +191,7 @@ export async function checkGamesForWeek(weekId: number): Promise<CheckGamesResul
     return { updated: [], stillScheduled: [], unmatched: [] };
   }
 
-  const uniqueDates = Array.from(new Set(pending.flatMap((g) => espnDateCandidates(g.kickoff))));
-  const eventsByDate = await Promise.all(uniqueDates.map((d) => fetchEspnScoreboardByDate(d)));
-  const allEvents = eventsByDate.flat();
+  const allEvents = await fetchEventsForGames(pending);
 
   const updated: Game[] = [];
   const stillScheduled: Game[] = [];
@@ -187,22 +210,12 @@ export async function checkGamesForWeek(weekId: number): Promise<CheckGamesResul
       continue;
     }
 
-    const comp = match.event.competitions?.[0];
-    const homeComp = comp?.competitors.find((c) => c.homeAway === "home");
-    const awayComp = comp?.competitors.find((c) => c.homeAway === "away");
-
-    // If our home/away is flipped relative to ESPN's, swap which competitor's
-    // score maps to our homeScore/awayScore fields.
-    const ourHomeComp = match.swapped ? awayComp : homeComp;
-    const ourAwayComp = match.swapped ? homeComp : awayComp;
-
-    const homeScore = ourHomeComp?.score != null ? Number(ourHomeComp.score) : NaN;
-    const awayScore = ourAwayComp?.score != null ? Number(ourAwayComp.score) : NaN;
-
-    if (Number.isNaN(homeScore) || Number.isNaN(awayScore)) {
+    const scores = matchScores(match);
+    if (!scores) {
       unmatched.push(game);
       continue;
     }
+    const { awayScore, homeScore } = scores;
 
     const result = await storage.updateGame(game.id, { awayScore, homeScore, status: "final" });
     if (result) updated.push(result);
@@ -210,4 +223,44 @@ export async function checkGamesForWeek(weekId: number): Promise<CheckGamesResul
   }
 
   return { updated, stillScheduled, unmatched };
+}
+
+// A game still not final this long after kickoff is treated as stale (e.g. a
+// postponed game) and no longer polled.
+const LIVE_WINDOW_MS = 8 * 60 * 60 * 1000;
+
+/**
+ * Read-only live scores for a week's games that have kicked off but aren't
+ * marked final in our database. Nothing is saved: the admin's "Check Games"
+ * and "Grade" steps stay the only way scores reach the database. Returns an
+ * empty map without calling ESPN when no game is in progress.
+ */
+export async function getLiveScoresForWeek(weekId: number): Promise<LiveScoresResponse> {
+  const now = Date.now();
+  const games = await storage.listGamesByWeek(weekId);
+  const live = games.filter((g) => {
+    if (g.status === "final") return false;
+    const kickoff = new Date(g.kickoff).getTime();
+    return kickoff <= now && now - kickoff < LIVE_WINDOW_MS;
+  });
+
+  const scores: Record<number, LiveScore> = {};
+  if (live.length > 0) {
+    const allEvents = await fetchEventsForGames(live);
+    for (const game of live) {
+      const match = findMatchingEvent(game, allEvents);
+      if (!match) continue;
+      const state = match.event.status?.type?.state;
+      if (state !== "in" && state !== "post") continue;
+      const matched = matchScores(match);
+      if (!matched) continue;
+      scores[game.id] = {
+        state,
+        ...matched,
+        detail: (match.event.status?.type?.shortDetail ?? (state === "post" ? "Final" : "Live")).slice(0, 40),
+      };
+    }
+  }
+
+  return { scores, fetchedAt: new Date(now).toISOString() };
 }
