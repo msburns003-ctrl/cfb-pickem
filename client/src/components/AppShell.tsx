@@ -43,6 +43,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <span className="font-display text-base font-semibold tracking-tight">Pick&apos;em</span>
           </Link>
           <nav className="flex items-center gap-1">
+            {/* Main links live in the bottom tab bar on phones. */}
             {items.map((item) => {
               const active = location.startsWith(item.href);
               const Icon = item.icon;
@@ -51,16 +52,15 @@ export function AppShell({ children }: { children: ReactNode }) {
                   key={item.href}
                   href={item.href}
                   className={cn(
-                    "flex items-center gap-1.5 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                    "hidden items-center gap-1.5 rounded-md px-3 py-2 text-sm font-medium transition-colors sm:flex",
                     active
                       ? "bg-sidebar-accent text-sidebar-accent-foreground"
                       : "text-sidebar-foreground/70 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground",
                   )}
                   data-testid={`link-nav-${item.label.toLowerCase().replace(/\s/g, "-")}`}
-                  aria-label={item.label}
                 >
                   <Icon className="h-4 w-4" />
-                  <span className="hidden sm:inline">{item.label}</span>
+                  <span>{item.label}</span>
                 </Link>
               );
             })}
@@ -75,7 +75,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               data-testid="link-nav-profile"
             >
               <User className="h-4 w-4" />
-              <span className="hidden sm:inline">{user?.name?.split(" ")[0]}</span>
+              <span>{user?.name?.split(" ")[0]}</span>
             </Link>
             <Button
               variant="ghost"
@@ -90,7 +90,37 @@ export function AppShell({ children }: { children: ReactNode }) {
           </nav>
         </div>
       </header>
-      <main className="mx-auto max-w-5xl px-4 py-6 pb-16">{children}</main>
+      <main className="mx-auto max-w-5xl px-4 py-6 pb-[calc(6rem+env(safe-area-inset-bottom))] sm:pb-16">{children}</main>
+
+      <nav
+        className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-sidebar pb-[env(safe-area-inset-bottom)] text-sidebar-foreground sm:hidden"
+        aria-label="Main"
+        data-testid="nav-bottom"
+      >
+        <div className="flex">
+          {items.map((item) => {
+            const active = location.startsWith(item.href);
+            const Icon = item.icon;
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={cn(
+                  "flex min-h-14 flex-1 flex-col items-center justify-center gap-0.5 text-[11px] font-medium transition-colors",
+                  active ? "text-sidebar-accent-foreground" : "text-sidebar-foreground/60",
+                )}
+                aria-current={active ? "page" : undefined}
+                data-testid={`link-bottom-nav-${item.label.toLowerCase().replace(/\s/g, "-")}`}
+              >
+                <span className={cn("rounded-full px-4 py-1", active && "bg-sidebar-accent")}>
+                  <Icon className="h-5 w-5" />
+                </span>
+                {item.label}
+              </Link>
+            );
+          })}
+        </div>
+      </nav>
     </div>
   );
 }

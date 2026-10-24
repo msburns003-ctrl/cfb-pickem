@@ -3,6 +3,8 @@ import { useQuery } from "@tanstack/react-query";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { GridByGame, scoreFor } from "@/components/GridByGame";
 import { LayoutGrid, Lock, TrendingUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth";
@@ -10,36 +12,8 @@ import { formatEastern } from "@/lib/time";
 import { useNow } from "@/hooks/use-now";
 import { useLiveScores } from "@/hooks/use-live-scores";
 import { livePickStatus } from "@shared/outcome";
-import type { Game, LiveScore, Week } from "@shared/schema";
-
-interface GridRow {
-  userId: number;
-  name: string;
-  weekPoints: number;
-  picks: Record<number, { selectedTeam: string; isCorrect: boolean | null }>;
-  upsetPick: {
-    underdogTeam: string;
-    favoriteTeam: string;
-    spread: number;
-    result: "pending" | "win" | "loss" | "push";
-    pointsEarned: number;
-  } | null;
-}
-
-interface ConsensusEntry {
-  awayCount: number;
-  homeCount: number;
-  awayPct: number;
-  homePct: number;
-  totalPicks: number;
-}
-
-interface GridResponse {
-  week: Week;
-  games: Game[];
-  grid: GridRow[];
-  consensus: Record<number, ConsensusEntry>;
-}
+import type { GridResponse } from "@/lib/grid-pdf";
+import type { Week } from "@shared/schema";
 
 function useWeeksList() {
   return useQuery<{ weeks: Week[] }>({ queryKey: ["/api/weeks"] });
@@ -48,15 +22,6 @@ function useWeeksList() {
 function shortTeam(name: string) {
   // Trim to last word or two for compact grid cells (e.g. "Ohio State" -> "Ohio St")
   return name.length > 12 ? name.slice(0, 11) + "…" : name;
-}
-
-// Saved final score if there is one, else ESPN's live score. Graded games
-// need neither: their cells already show the official result.
-function scoreFor(game: Game, live: Record<number, LiveScore>): LiveScore | undefined {
-  if (game.status === "final" && game.awayScore != null && game.homeScore != null) {
-    return { state: "post", awayScore: game.awayScore, homeScore: game.homeScore, detail: "Final" };
-  }
-  return live[game.id];
 }
 
 function shortTeamLabel(name: string, rank: number | null) {
@@ -70,6 +35,8 @@ export default function GridPage() {
   const [selectedWeekId, setSelectedWeekId] = useState<number | null>(null);
   const nameColRef = useRef<HTMLTableCellElement>(null);
   const [nameColWidth, setNameColWidth] = useState(0);
+  // Phones default to the by-game view; the full table stays one tap away.
+  const [mobileView, setMobileView] = useState<"games" | "table">("games");
 
   const weeks = weeksData?.weeks ?? [];
   const activeWeekId = selectedWeekId ?? weeks.find((w) => w.status !== "setup")?.id ?? weeks[0]?.id ?? null;
@@ -95,7 +62,7 @@ export default function GridPage() {
     measure();
     window.addEventListener("resize", measure);
     return () => window.removeEventListener("resize", measure);
-  }, [data]);
+  }, [data, mobileView]);
 
   if (!weeks.length) {
     return (
@@ -140,14 +107,34 @@ export default function GridPage() {
         </div>
       )}
 
+      {!isLoading && !error && data && data.games.length > 0 && (
+        <ToggleGroup
+          type="single"
+          variant="outline"
+          size="sm"
+          value={mobileView}
+          onValueChange={(v) => v && setMobileView(v as "games" | "table")}
+          className="justify-start sm:hidden"
+          data-testid="toggle-grid-view"
+        >
+          <ToggleGroupItem value="games" data-testid="toggle-grid-view-games">By game</ToggleGroupItem>
+          <ToggleGroupItem value="table" data-testid="toggle-grid-view-table">Table</ToggleGroupItem>
+        </ToggleGroup>
+      )}
+
       {!isLoading && !error && data && (
         <>
+          {data.games.length > 0 && (
+            <div className={cn(mobileView === "games" ? "block" : "hidden", "sm:hidden")}>
+              <GridByGame data={data} liveScores={liveScores} currentUserId={user?.id} />
+            </div>
+          )}
           {data.games.length === 0 ? (
             <div className="rounded-lg border border-dashed border-border p-8 text-center text-muted-foreground">
               No games were selected for this week.
             </div>
           ) : (
-            <div className="overflow-x-auto rounded-lg border border-card-border">
+            <div className={cn("overflow-x-auto rounded-lg border border-card-border sm:block", mobileView === "table" ? "block" : "hidden")}>
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-card-border bg-muted/50 text-left text-xs uppercase tracking-wide text-muted-foreground">
@@ -311,7 +298,7 @@ export default function GridPage() {
             </div>
           )}
           {showUnofficialNote && (
-            <p className="text-xs text-muted-foreground" data-testid="text-grid-unofficial-note">
+            <p className={cn("text-xs text-muted-foreground sm:block", mobileView === "table" ? "block" : "hidden")} data-testid="text-grid-unofficial-note">
               <span className="italic">Italic</span> picks are unofficial, based on the current score. Points count once
               the week is graded.
             </p>

@@ -446,7 +446,7 @@ export default function DashboardPage() {
 
           {unsavedCount > 0 && (
             <div
-              className="fixed inset-x-4 bottom-4 z-50 flex items-center justify-between gap-3 rounded-lg border border-card-border bg-card p-3 shadow-lg sm:inset-x-auto sm:right-6 sm:w-96"
+              className="fixed inset-x-4 bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-50 flex items-center justify-between gap-3 rounded-lg border border-card-border bg-card p-3 shadow-lg sm:inset-x-auto sm:bottom-4 sm:right-6 sm:w-96"
               data-testid="bar-save-picks"
             >
               <span className="text-sm font-medium">
