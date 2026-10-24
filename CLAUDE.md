@@ -51,7 +51,8 @@ server/
   auth.ts               password hashing (scrypt), session cookie, temp passwords
   scoring.ts            grading, ATS logic, upset points, standings
   scores.ts             fetches live and final scores from the ESPN public scoreboard
-  auto-grade.ts         background job: saves final scores and grades automatically
+  auto-grade.ts         background job: saves final scores, grades, and sets up the next week
+  schedule.ts           imports a week's games and lines from ESPN; creates the next week
   storage.ts            all Supabase reads/writes
   cache.ts              in-memory response caching
 shared/schema.ts        types and Zod validation shared by client and server
@@ -72,7 +73,7 @@ League rules (already decided, do not change without the commissioner's approval
 - **Money games** are worth 2 points. How many there are each week (`moneyGameCount`) varies by week.
 - **One upset pick per member per week**, scored by `upsetPickPoints(spread)`: spread ≥ 15 → 3 pts, ≥ 7.5 → 2 pts, ≥ 0.5 → 1 pt.
 - **Tied members share the same rank** in standings (no tiebreaker). A tie for a weekly win shows as a PUSH.
-- Games are auto-populated each week; the admin chooses the slate by toggling `isSelected`.
+- Games are auto-populated each week from ESPN (FBS games with betting lines, `server/schedule.ts`): when the latest week is fully graded, the background job creates the next week in `setup` and imports its games; admins can also click **Import from ESPN** on a week. The admin chooses the slate by toggling `isSelected` and opens the week. Lines are only refreshed on games nobody has picked yet.
 - Grading runs through the app's own grading code (`gradeCompletedGames` in `server/scoring.ts`). It runs automatically: every 5 minutes `server/auto-grade.ts` saves final scores from ESPN and grades once the week's picks are locked. Admins can still check and grade manually (`POST /api/admin/weeks/:id/check-games` and `/grade`), and hand-entered scores are never overwritten.
 - Members log in with email and password.
 

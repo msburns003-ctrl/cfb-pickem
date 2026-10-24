@@ -18,6 +18,7 @@ import {
 import { insertWeekSchema, type InsertWeek, insertCristoBallEntrySchema, insertCristoBallResultsSchema, insertCristoBallLockDeadlineSchema } from "@shared/schema";
 import { checkGamesForWeek, getLiveScoresForWeek } from "./scores";
 import { autoGradeEnabled, getAutoGradeStatus } from "./auto-grade";
+import { importEspnGamesForWeek } from "./schedule";
 import { z } from "zod";
 import { cached, invalidate, keys, prefixes, cacheStats } from "./cache";
 
@@ -768,6 +769,20 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       res.json({ ok: true, ...result });
     } catch (err) {
       res.status(400).json({ message: err instanceof Error ? err.message : "Failed to grade games" });
+    }
+  });
+
+  // Adds the week's FBS games from ESPN as candidates and refreshes lines on
+  // games without picks yet. Safe to run repeatedly.
+  app.post("/api/admin/weeks/:id/games/import-espn", requireAdmin, async (req, res) => {
+    const weekId = Number(req.params.id);
+    if (!Number.isInteger(weekId) || weekId <= 0) return res.status(400).json({ message: "Invalid week" });
+    try {
+      const result = await importEspnGamesForWeek(weekId);
+      res.json(result);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to import games";
+      res.status(message === "Week not found" ? 404 : 500).json({ message });
     }
   });
 

@@ -22,6 +22,7 @@ import { storage } from "./storage";
 import { invalidate, prefixes } from "./cache";
 import { checkGamesForWeek } from "./scores";
 import { gradeCompletedGames, gradeGameOutcome } from "./scoring";
+import { ensureNextWeek } from "./schedule";
 import type { Game, UpsetPick, Week } from "@shared/schema";
 
 const INTERVAL_MS = 5 * 60 * 1000;
@@ -40,6 +41,10 @@ export interface AutoGradeStatus {
 
 const statusByWeek = new Map<number, AutoGradeStatus>();
 let running = false;
+// Creating the next week calls ESPN; when there's nothing to create (e.g. the
+// offseason) don't retry on every run.
+const NEXT_WEEK_RETRY_MS = 6 * 60 * 60 * 1000;
+let nextWeekCheckedAt = 0;
 
 export function autoGradeEnabled(): boolean {
   const setting = process.env.AUTO_GRADE?.toLowerCase();
@@ -122,6 +127,22 @@ export async function runAutoGrade(): Promise<void> {
         const message = err instanceof Error ? err.message : "Unknown error";
         console.error(`[auto-grade] week ${week.id} failed:`, message);
         statusByWeek.set(week.id, { lastRunAt: new Date(now).toISOString(), savedScores: 0, graded: false, error: message });
+      }
+    }
+
+    // Grading may have just finished the latest week; set up the next one.
+    if (now - nextWeekCheckedAt >= NEXT_WEEK_RETRY_MS) {
+      nextWeekCheckedAt = now;
+      try {
+        const created = await ensureNextWeek(now);
+        if (created) {
+          console.log(
+            `[auto-grade] created ${created.week.label} (week ${created.week.id}): ${created.import.added} games, ${created.import.noLine.length} without lines`,
+          );
+          invalidate(prefixes.dashboard);
+        }
+      } catch (err) {
+        console.error("[auto-grade] next week setup failed:", err instanceof Error ? err.message : err);
       }
     }
   } catch (err) {
