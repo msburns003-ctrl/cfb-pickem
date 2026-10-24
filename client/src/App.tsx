@@ -18,6 +18,7 @@ import AdminWeeksPage from "@/pages/admin/weeks";
 import AdminMembersPage from "@/pages/admin/members";
 import AdminWeekDetailPage from "@/pages/admin/week-detail";
 import CristoBallPage from "@/pages/cristoball";
+import StatsPage from "@/pages/stats";
 import AdminCristoBallPage from "@/pages/admin/cristoball";
 
 function FullScreenLoader() {
@@ -60,6 +61,11 @@ function AppRouter() {
       <Route path="/grid">
         <Protected>
           <GridPage />
+        </Protected>
+      </Route>
+      <Route path="/stats/:id?">
+        <Protected>
+          <StatsPage />
         </Protected>
       </Route>
       <Route path="/profile">

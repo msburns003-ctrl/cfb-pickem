@@ -9,6 +9,7 @@ import {
   ensureMoneyGamesAssigned,
   upsetPickPoints,
   computeStandings,
+  computeSeasonStats,
   ATS_THRESHOLD,
   getCurrentSeasonYear,
   getCristoBallLockDeadline,
@@ -278,6 +279,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
       return { rows: rowsWithChange, weeks: gradedWeeks };
     });
+    res.json(payload);
+  });
+
+  // ---------------- SEASON STATS ----------------
+  // Every member's season stats from graded picks. Cached for 30s like
+  // standings, and invalidated with them.
+  app.get("/api/stats", requireAuth, async (_req, res) => {
+    const payload = await cached(keys.seasonStats(), 30_000, () => computeSeasonStats());
     res.json(payload);
   });
 

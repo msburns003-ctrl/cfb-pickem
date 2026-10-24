@@ -8,6 +8,9 @@ import type {
   CristoBallEntry,
   CristoBallResults,
   CristoBallPointsBreakdown,
+  PickRecord,
+  MemberSeasonStats,
+  SeasonStatsResponse,
 } from "@shared/schema";
 import {
   CRISTO_BALL_CATEGORIES,
@@ -406,4 +409,136 @@ export async function computeStandings(weekIdsFilter?: number[]): Promise<Standi
   }
 
   return rows;
+}
+
+// ---------- Season stats ----------
+
+function emptyRecord(): PickRecord {
+  return { wins: 0, losses: 0, pushes: 0 };
+}
+
+function addResult(r: PickRecord, result: "win" | "loss" | "push") {
+  if (result === "win") r.wins++;
+  else if (result === "loss") r.losses++;
+  else r.pushes++;
+}
+
+// Shared rank on ties, highest value first.
+function rankBy<T>(items: T[], value: (item: T) => number): Map<T, number> {
+  const sorted = [...items].sort((a, b) => value(b) - value(a));
+  const ranks = new Map<T, number>();
+  sorted.forEach((item, i) => {
+    const prev = sorted[i - 1];
+    ranks.set(item, prev !== undefined && value(prev) === value(item) ? ranks.get(prev)! : i + 1);
+  });
+  return ranks;
+}
+
+/**
+ * Season stats for every member, built from graded picks only (the same data
+ * standings use, so totals always match). A pick on a game that pushed ATS
+ * counts as a push here even though it scores 0, like a loss.
+ */
+export async function computeSeasonStats(): Promise<SeasonStatsResponse> {
+  const standings = await computeStandings();
+  const users = await storage.listUsers();
+  const allWeeks = (await storage.listWeeks()).sort((a, b) => a.weekNumber - b.weekNumber);
+
+  const stats = new Map<number, MemberSeasonStats>();
+  for (const row of standings) {
+    stats.set(row.userId, {
+      userId: row.userId,
+      name: row.name,
+      rank: row.rank,
+      totalPoints: row.totalPoints,
+      overall: emptyRecord(),
+      ats: emptyRecord(),
+      su: emptyRecord(),
+      money: emptyRecord(),
+      upsets: { ...emptyRecord(), points: 0 },
+      weeks: [],
+      weeklyWins: 0,
+      weeklyPushes: 0,
+      bestWeek: null,
+      longestStreak: 0,
+      currentStreak: 0,
+    });
+  }
+
+  // Graded picks per member in kickoff order, for streaks.
+  const timeline = new Map<number, { kickoff: string; gameId: number; correct: boolean; push: boolean }[]>();
+  const cumulative = new Map<number, number>(users.map((u) => [u.id, 0]));
+  const weeksOut: SeasonStatsResponse["weeks"] = [];
+
+  for (const week of allWeeks) {
+    const picks = (await storage.listPicksByWeek(week.id)).filter((p) => p.isCorrect != null);
+    const upsets = (await storage.listUpsetPicksByWeek(week.id)).filter((u) => u.result !== "pending");
+    if (picks.length === 0 && upsets.length === 0) continue; // nothing graded this week
+
+    const games = new Map((await storage.listGamesByWeek(week.id)).map((g) => [g.id, g]));
+    const weekPoints = new Map<number, number>(users.map((u) => [u.id, 0]));
+
+    for (const p of picks) {
+      const s = stats.get(p.userId);
+      const game = games.get(p.gameId);
+      if (!s || !game) continue;
+      const push = game.atsResult === "push";
+      const result = push ? "push" : p.isCorrect ? "win" : "loss";
+      addResult(s.overall, result);
+      addResult(game.pickType === "ATS" ? s.ats : s.su, result);
+      if (game.isMoneyGame) addResult(s.money, result);
+      weekPoints.set(p.userId, (weekPoints.get(p.userId) ?? 0) + (p.pointsEarned ?? 0));
+      const list = timeline.get(p.userId) ?? [];
+      list.push({ kickoff: game.kickoff, gameId: game.id, correct: !!p.isCorrect, push });
+      timeline.set(p.userId, list);
+    }
+    for (const u of upsets) {
+      const s = stats.get(u.userId);
+      if (!s) continue;
+      addResult(s.upsets, u.result as "win" | "loss" | "push");
+      s.upsets.points += u.pointsEarned;
+      weekPoints.set(u.userId, (weekPoints.get(u.userId) ?? 0) + u.pointsEarned);
+    }
+
+    for (const [userId, pts] of Array.from(weekPoints.entries())) cumulative.set(userId, (cumulative.get(userId) ?? 0) + pts);
+
+    const members = Array.from(stats.values());
+    const weekRanks = rankBy(members, (m) => weekPoints.get(m.userId) ?? 0);
+    const seasonRanks = rankBy(members, (m) => cumulative.get(m.userId) ?? 0);
+    const top = Math.max(...members.map((m) => weekPoints.get(m.userId) ?? 0));
+    const topCount = members.filter((m) => (weekPoints.get(m.userId) ?? 0) === top).length;
+
+    for (const m of members) {
+      const points = weekPoints.get(m.userId) ?? 0;
+      m.weeks.push({ weekId: week.id, points, weekRank: weekRanks.get(m)!, seasonRank: seasonRanks.get(m)! });
+      if (points === top && top > 0) {
+        if (topCount === 1) m.weeklyWins++;
+        else m.weeklyPushes++;
+      }
+      if (!m.bestWeek || points > m.bestWeek.points) m.bestWeek = { weekId: week.id, points };
+    }
+
+    const total = members.reduce((sum, m) => sum + (weekPoints.get(m.userId) ?? 0), 0);
+    weeksOut.push({
+      id: week.id,
+      label: week.label,
+      weekNumber: week.weekNumber,
+      leagueAverage: members.length > 0 ? Math.round((total / members.length) * 10) / 10 : 0,
+    });
+  }
+
+  // Streaks skip pushes: they neither extend nor break a run.
+  for (const m of Array.from(stats.values())) {
+    const list = (timeline.get(m.userId) ?? [])
+      .filter((t) => !t.push)
+      .sort((a, b) => a.kickoff.localeCompare(b.kickoff) || a.gameId - b.gameId);
+    let run = 0;
+    for (const t of list) {
+      run = t.correct ? (run > 0 ? run + 1 : 1) : run < 0 ? run - 1 : -1;
+      m.longestStreak = Math.max(m.longestStreak, run);
+    }
+    m.currentStreak = run;
+  }
+
+  return { weeks: weeksOut, members: Array.from(stats.values()) };
 }

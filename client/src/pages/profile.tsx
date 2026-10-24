@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { Link } from "wouter";
+import { BarChart3 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
@@ -42,6 +44,11 @@ export default function ProfilePage() {
           <p>
             <span className="text-foreground font-medium">{user?.name}</span> · {user?.email}
           </p>
+          <Button asChild variant="outline" size="sm" className="mt-3">
+            <Link href="/stats" data-testid="link-profile-stats">
+              <BarChart3 className="h-4 w-4" /> View my season stats
+            </Link>
+          </Button>
         </CardContent>
       </Card>
 
