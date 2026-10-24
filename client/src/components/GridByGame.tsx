@@ -7,15 +7,7 @@ import { livePickStatus, type LivePickStatus } from "@shared/outcome";
 import { Check, Coins, TrendingUp, Trophy, X } from "lucide-react";
 import type { Game, LiveScore } from "@shared/schema";
 import type { GridResponse, GridRow } from "@/lib/grid-pdf";
-
-// Saved final score if there is one, else ESPN's live score. Graded games
-// need neither: their picks already show the official result.
-export function scoreFor(game: Game, live: Record<number, LiveScore>): LiveScore | undefined {
-  if (game.status === "final" && game.awayScore != null && game.homeScore != null) {
-    return { state: "post", awayScore: game.awayScore, homeScore: game.homeScore, detail: "Final" };
-  }
-  return live[game.id];
-}
+import { scoreFor, type WeekTally } from "@/lib/projection";
 
 function teamLabel(team: string, rank: number | null) {
   return rank ? `#${rank} ${team}` : team;
@@ -49,17 +41,27 @@ function NameChip({ name, isYou, result }: { name: string; isYou: boolean; resul
   );
 }
 
-function rankRows(rows: GridRow[]) {
-  const sorted = [...rows].sort((a, b) => b.weekPoints - a.weekPoints);
+function rankRows(rows: GridRow[], points: (row: GridRow) => number) {
+  const sorted = [...rows].sort((a, b) => points(b) - points(a));
   // Tied members share the same rank.
-  return sorted.map((row) => ({ row, rank: sorted.findIndex((r) => r.weekPoints === row.weekPoints) + 1 }));
+  return sorted.map((row) => ({ row, rank: sorted.findIndex((r) => points(r) === points(row)) + 1 }));
 }
 
 const LEADERBOARD_PREVIEW = 5;
 
-function WeekLeaderboard({ rows, currentUserId }: { rows: GridRow[]; currentUserId: number | undefined }) {
+function WeekLeaderboard({
+  rows,
+  currentUserId,
+  projected,
+}: {
+  rows: GridRow[];
+  currentUserId: number | undefined;
+  projected: Map<number, WeekTally> | null;
+}) {
   const [showAll, setShowAll] = useState(false);
-  const ranked = rankRows(rows);
+  // While games are live, rank by projected points so this works as a live leaderboard.
+  const pointsOf = (row: GridRow) => (projected ? projected.get(row.userId)?.projectedPoints ?? row.weekPoints : row.weekPoints);
+  const ranked = rankRows(rows, pointsOf);
   const visible = showAll
     ? ranked
     : ranked.filter((r, i) => i < LEADERBOARD_PREVIEW || r.row.userId === currentUserId);
@@ -68,6 +70,7 @@ function WeekLeaderboard({ rows, currentUserId }: { rows: GridRow[]; currentUser
     <div className="rounded-lg border border-card-border bg-card p-3" data-testid="card-grid-leaderboard">
       <h2 className="mb-2 flex items-center gap-1.5 text-sm font-semibold">
         <Trophy className="h-4 w-4 text-accent" /> This week's points
+        {projected && <span className="ml-auto text-xs font-normal italic text-muted-foreground">projected · official</span>}
       </h2>
       <ol className="flex flex-col text-sm">
         {visible.map(({ row, rank }, i) => (
@@ -87,7 +90,14 @@ function WeekLeaderboard({ rows, currentUserId }: { rows: GridRow[]; currentUser
                 {row.userId === currentUserId && <span className="ml-1 text-xs font-normal text-muted-foreground">(you)</span>}
               </span>
             </span>
-            <span className="shrink-0 tabular-nums">{row.weekPoints}</span>
+            {projected ? (
+              <span className="shrink-0 tabular-nums">
+                <span className="italic">{pointsOf(row)}</span>
+                <span className="ml-1.5 text-xs font-normal text-muted-foreground">· {row.weekPoints}</span>
+              </span>
+            ) : (
+              <span className="shrink-0 tabular-nums">{row.weekPoints}</span>
+            )}
           </li>
         ))}
       </ol>
@@ -178,7 +188,7 @@ function GameBlock({ game, data, score, currentUserId }: { game: Game; data: Gri
   );
 }
 
-function UpsetBlock({ data, currentUserId }: { data: GridResponse; currentUserId: number | undefined }) {
+function UpsetBlock({ data, liveScores, currentUserId }: { data: GridResponse; liveScores: Record<number, LiveScore>; currentUserId: number | undefined }) {
   const withUpset = data.grid.filter((row) => row.upsetPick);
   if (withUpset.length === 0) return null;
   const byTeam = new Map<string, GridRow[]>();
@@ -196,14 +206,28 @@ function UpsetBlock({ data, currentUserId }: { data: GridResponse; currentUserId
       <div className="flex flex-col gap-2.5">
         {teams.map(([team, rows]) => {
           const up = rows[0].upsetPick!;
-          const result: PickResult =
+          const game = data.upsetGames?.find((g) => g.id === up.gameId);
+          const score = game ? scoreFor(game, liveScores) : undefined;
+          let result: PickResult =
             up.result === "win" ? { kind: "official", correct: true } : up.result === "loss" ? { kind: "official", correct: false } : null;
+          if (up.result === "pending" && game && score) {
+            // Upset picks win only if the underdog wins outright.
+            const underdogIsAway = game.awayTeam === team;
+            const diff = underdogIsAway ? score.awayScore - score.homeScore : score.homeScore - score.awayScore;
+            result = { kind: "live", status: diff > 0 ? "winning" : diff < 0 ? "losing" : "even" };
+          }
           return (
             <div key={team}>
               <div className="mb-1 text-xs text-muted-foreground">
                 <span className="font-semibold text-foreground">{team}</span> +{up.spread} vs {up.favoriteTeam}
                 {up.result === "win" && ` · +${up.pointsEarned}`}
                 {up.result === "push" && " · push"}
+                {up.result === "pending" && score && (
+                  <span className={score.state === "in" ? "text-destructive" : undefined}>
+                    {" "}
+                    · {score.state === "in" ? "Live" : "Final"} {score.awayScore}–{score.homeScore}
+                  </span>
+                )}
               </div>
               <div className="flex flex-wrap gap-1">
                 {rows.map((row) => (
@@ -220,7 +244,17 @@ function UpsetBlock({ data, currentUserId }: { data: GridResponse; currentUserId
 
 // Phone layout for the picks grid: one card per game listing who picked
 // each side, plus the week's points and upset picks.
-export function GridByGame({ data, liveScores, currentUserId }: { data: GridResponse; liveScores: Record<number, LiveScore>; currentUserId: number | undefined }) {
+export function GridByGame({
+  data,
+  liveScores,
+  currentUserId,
+  projected,
+}: {
+  data: GridResponse;
+  liveScores: Record<number, LiveScore>;
+  currentUserId: number | undefined;
+  projected: Map<number, WeekTally> | null;
+}) {
   const hasUnofficial = data.games.some((g) => {
     const score = scoreFor(g, liveScores);
     return !!score && data.grid.some((row) => row.picks[g.id] && row.picks[g.id].isCorrect == null);
@@ -228,11 +262,11 @@ export function GridByGame({ data, liveScores, currentUserId }: { data: GridResp
 
   return (
     <div className="flex flex-col gap-3" data-testid="grid-by-game">
-      <WeekLeaderboard rows={data.grid} currentUserId={currentUserId} />
+      <WeekLeaderboard rows={data.grid} currentUserId={currentUserId} projected={projected} />
       {data.games.map((game) => (
         <GameBlock key={game.id} game={game} data={data} score={scoreFor(game, liveScores)} currentUserId={currentUserId} />
       ))}
-      <UpsetBlock data={data} currentUserId={currentUserId} />
+      <UpsetBlock data={data} liveScores={liveScores} currentUserId={currentUserId} />
       {hasUnofficial && (
         <p className="text-xs text-muted-foreground">
           <span className="italic">Italic</span> names are unofficial, based on the current score. Points count once the week is graded.

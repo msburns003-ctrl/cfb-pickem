@@ -491,6 +491,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
               spread: upset.spread,
               result: upset.result,
               pointsEarned: upset.pointsEarned,
+              gameId: upset.gameId,
             }
           : null,
       };
@@ -518,7 +519,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       };
     }
 
-    return { week, games: selectedGames, grid, consensus };
+    // Games members made upset picks on (usually not on the slate), so the
+    // grid can show their live scores and project upset points.
+    const upsetGameIds = new Set(weekUpsetPicks.map((u) => u.gameId));
+    const upsetGames = allGames.filter((g) => upsetGameIds.has(g.id));
+
+    return { week, games: selectedGames, grid, consensus, upsetGames };
   }
 
   // ---------------- ADMIN: MEMBERS ----------------

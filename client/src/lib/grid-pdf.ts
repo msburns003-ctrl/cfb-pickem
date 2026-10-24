@@ -16,6 +16,7 @@ export interface GridRow {
     spread: number;
     result: "pending" | "win" | "loss" | "push";
     pointsEarned: number;
+    gameId: number;
   } | null;
 }
 
@@ -32,6 +33,7 @@ export interface GridResponse {
   games: Game[];
   grid: GridRow[];
   consensus: Record<number, ConsensusEntry>;
+  upsetGames: Game[];
 }
 
 type RGB = [number, number, number];

@@ -142,7 +142,7 @@ export function GameCard({ game, pick, selectedTeam, unsaved, locked, kickedOff,
             <span
               className={cn(
                 "text-xs font-medium",
-                pickStatus === "winning" && "text-primary",
+                pickStatus === "winning" && "text-green-600 dark:text-green-400",
                 pickStatus === "losing" && "text-destructive",
                 pickStatus === "even" && "text-muted-foreground",
               )}

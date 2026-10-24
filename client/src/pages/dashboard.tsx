@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
-import { Link } from "wouter";
 import { GameCard } from "@/components/GameCard";
 import { UpsetPickPanel } from "@/components/UpsetPickPanel";
 import { CountdownTimer } from "@/components/CountdownTimer";
@@ -12,8 +11,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { useNow } from "@/hooks/use-now";
 import { useLiveScores } from "@/hooks/use-live-scores";
+import { tallyWeek } from "@/lib/projection";
+import { WeekSummary, type SeasonStanding } from "@/components/WeekSummary";
+import { useAuth } from "@/lib/auth";
 import { formatEastern } from "@/lib/time";
-import { Sparkles, ArrowRight, Save } from "lucide-react";
+import { Save } from "lucide-react";
 import type { Game, Pick, UpsetPick, Week } from "@shared/schema";
 
 interface DashboardResponse {
@@ -32,6 +34,7 @@ function useWeeksList() {
 
 export default function DashboardPage() {
   const { toast } = useToast();
+  const { user } = useAuth();
   const queryClient = useQueryClient();
   const { data: weeksData } = useWeeksList();
   const [selectedWeekId, setSelectedWeekId] = useState<number | null>(null);
@@ -50,7 +53,13 @@ export default function DashboardPage() {
   const now = useNow();
   const weekLocked = !!data && (data.locked || now >= new Date(data.week.pickDeadline).getTime());
   const hasKickedOff = (game: Game) => now >= new Date(game.kickoff).getTime();
-  const liveScores = useLiveScores(activeWeekId, data?.games ?? [], now);
+  const upsetGame = data?.myUpsetPick
+    ? [...data.games, ...data.availableForUpset].find((g) => g.id === data.myUpsetPick!.gameId)
+    : undefined;
+  const liveScores = useLiveScores(activeWeekId, [...(data?.games ?? []), ...(upsetGame ? [upsetGame] : [])], now);
+  const { data: standingsData } = useQuery<{ rows: { userId: number; rank: number; totalPoints: number }[] }>({
+    queryKey: ["/api/standings"],
+  });
 
   // Selecting a team only updates this local map — nothing hits the network
   // until the member presses "Save picks". Keyed by gameId so switching back
@@ -332,6 +341,29 @@ export default function DashboardPage() {
     return () => window.removeEventListener("beforeunload", handler);
   }, [unsavedCount]);
 
+  const tally = data
+    ? tallyWeek(
+        data.games,
+        Object.fromEntries(data.myPicks.map((p) => [p.gameId, p])),
+        data.myPicks.reduce((sum, p) => sum + (p.pointsEarned ?? 0), 0) + (data.myUpsetPick?.pointsEarned ?? 0),
+        data.myUpsetPick && { ...data.myUpsetPick, game: upsetGame },
+        liveScores,
+      )
+    : null;
+  // Only worth showing once something has started or been graded.
+  const showSummary =
+    !!tally &&
+    (tally.wins + tally.losses + tally.liveWinning + tally.liveLosing + tally.liveEven > 0 || tally.upsetLive !== null || tally.officialPoints > 0);
+  const myStanding = standingsData?.rows.find((r) => r.userId === user?.id);
+  const season: SeasonStanding | null = myStanding
+    ? {
+        rank: myStanding.rank,
+        tied: standingsData!.rows.filter((r) => r.rank === myStanding.rank).length > 1,
+        memberCount: standingsData!.rows.length,
+        totalPoints: myStanding.totalPoints,
+      }
+    : null;
+
   const submittedCount = data?.myPicks.length ?? 0;
   const totalGames = data?.games.length ?? 0;
 
@@ -357,20 +389,6 @@ export default function DashboardPage() {
 
   return (
     <div className={cn("flex flex-col gap-6", unsavedCount > 0 && "pb-20")}>
-      <Link
-        href="/cristoball"
-        className="flex items-center justify-between gap-3 rounded-lg border border-accent/30 bg-accent/10 px-4 py-3 text-sm transition-colors hover:bg-accent/20"
-        data-testid="link-cristoball-banner"
-      >
-        <span className="flex items-center gap-2 font-medium text-accent-foreground">
-          <Sparkles className="h-4 w-4 text-accent" />
-          Made your season-long Cristo-Ball predictions yet?
-        </span>
-        <span className="flex items-center gap-1 text-accent shrink-0">
-          Go to Cristo-Ball
-          <ArrowRight className="h-4 w-4" />
-        </span>
-      </Link>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="font-display text-xl font-semibold tracking-tight" data-testid="text-week-label">
@@ -418,6 +436,7 @@ export default function DashboardPage() {
         </div>
       ) : (
         <>
+          {showSummary && tally && <WeekSummary tally={tally} upsetPick={data.myUpsetPick} season={season} />}
           {weekLocked && data.week.status === "open" && (
             <p className="rounded-md bg-muted px-3 py-2 text-sm text-muted-foreground">
               Picks are locked for this week. Check back once results are graded.

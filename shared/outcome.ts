@@ -44,3 +44,12 @@ export function livePickStatus(game: GameLine, selectedTeam: string, awayScore: 
   if (leader === null) return "even";
   return leader === selectedTeam ? "winning" : "losing";
 }
+
+/** Tiered points for a winning underdog bonus pick, based on the spread magnitude. */
+export function upsetPickPoints(spread: number): number {
+  const s = Math.abs(spread);
+  if (s >= 15) return 3;
+  if (s >= 7.5) return 2;
+  if (s >= 0.5) return 1;
+  return 0;
+}
