@@ -52,8 +52,8 @@ export function GameCard({ game, pick, selectedTeam, unsaved, locked, kickedOff,
 
   return (
     <div className="rounded-lg border border-card-border bg-card p-4" data-testid={`card-game-${game.id}`}>
-      <div className="mb-3 flex items-center justify-between gap-2 text-xs text-muted-foreground">
-        <span>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+        <span className="whitespace-nowrap">
           {formatKickoff(game.kickoff)}
           {kickedOff && !graded && !score && (
             <span className="ml-1.5 font-medium" data-testid={`text-kicked-off-${game.id}`}>
@@ -61,7 +61,7 @@ export function GameCard({ game, pick, selectedTeam, unsaved, locked, kickedOff,
             </span>
           )}
         </span>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {game.broadcast && (
             <span className="flex items-center gap-1">
               <Tv className="h-3 w-3" /> {game.broadcast}
@@ -142,7 +142,7 @@ export function GameCard({ game, pick, selectedTeam, unsaved, locked, kickedOff,
             <span
               className={cn(
                 "text-xs font-medium",
-                pickStatus === "winning" && "text-primary",
+                pickStatus === "winning" && "text-green-600 dark:text-green-400",
                 pickStatus === "losing" && "text-destructive",
                 pickStatus === "even" && "text-muted-foreground",
               )}

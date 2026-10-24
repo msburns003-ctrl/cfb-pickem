@@ -3,6 +3,9 @@ import { useQuery } from "@tanstack/react-query";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { GridByGame } from "@/components/GridByGame";
+import { scoreFor, tallyWeek, type WeekTally } from "@/lib/projection";
 import { LayoutGrid, Lock, TrendingUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth";
@@ -10,36 +13,8 @@ import { formatEastern } from "@/lib/time";
 import { useNow } from "@/hooks/use-now";
 import { useLiveScores } from "@/hooks/use-live-scores";
 import { livePickStatus } from "@shared/outcome";
-import type { Game, LiveScore, Week } from "@shared/schema";
-
-interface GridRow {
-  userId: number;
-  name: string;
-  weekPoints: number;
-  picks: Record<number, { selectedTeam: string; isCorrect: boolean | null }>;
-  upsetPick: {
-    underdogTeam: string;
-    favoriteTeam: string;
-    spread: number;
-    result: "pending" | "win" | "loss" | "push";
-    pointsEarned: number;
-  } | null;
-}
-
-interface ConsensusEntry {
-  awayCount: number;
-  homeCount: number;
-  awayPct: number;
-  homePct: number;
-  totalPicks: number;
-}
-
-interface GridResponse {
-  week: Week;
-  games: Game[];
-  grid: GridRow[];
-  consensus: Record<number, ConsensusEntry>;
-}
+import type { GridResponse } from "@/lib/grid-pdf";
+import type { Week } from "@shared/schema";
 
 function useWeeksList() {
   return useQuery<{ weeks: Week[] }>({ queryKey: ["/api/weeks"] });
@@ -48,15 +23,6 @@ function useWeeksList() {
 function shortTeam(name: string) {
   // Trim to last word or two for compact grid cells (e.g. "Ohio State" -> "Ohio St")
   return name.length > 12 ? name.slice(0, 11) + "…" : name;
-}
-
-// Saved final score if there is one, else ESPN's live score. Graded games
-// need neither: their cells already show the official result.
-function scoreFor(game: Game, live: Record<number, LiveScore>): LiveScore | undefined {
-  if (game.status === "final" && game.awayScore != null && game.homeScore != null) {
-    return { state: "post", awayScore: game.awayScore, homeScore: game.homeScore, detail: "Final" };
-  }
-  return live[game.id];
 }
 
 function shortTeamLabel(name: string, rank: number | null) {
@@ -70,6 +36,8 @@ export default function GridPage() {
   const [selectedWeekId, setSelectedWeekId] = useState<number | null>(null);
   const nameColRef = useRef<HTMLTableCellElement>(null);
   const [nameColWidth, setNameColWidth] = useState(0);
+  // Phones default to the by-game view; the full table stays one tap away.
+  const [mobileView, setMobileView] = useState<"games" | "table">("games");
 
   const weeks = weeksData?.weeks ?? [];
   const activeWeekId = selectedWeekId ?? weeks.find((w) => w.status !== "setup")?.id ?? weeks[0]?.id ?? null;
@@ -81,7 +49,26 @@ export default function GridPage() {
   });
 
   const now = useNow();
-  const liveScores = useLiveScores(activeWeekId, data?.games ?? [], now);
+  const liveScores = useLiveScores(activeWeekId, [...(data?.games ?? []), ...(data?.upsetGames ?? [])], now);
+  const tallies = new Map<number, WeekTally>(
+    (data?.grid ?? []).map((row) => [
+      row.userId,
+      tallyWeek(
+        data!.games,
+        row.picks,
+        row.weekPoints,
+        row.upsetPick && {
+          ...row.upsetPick,
+          game: data!.upsetGames?.find((g) => g.id === row.upsetPick!.gameId),
+        },
+        liveScores,
+      ),
+    ]),
+  );
+  // Projected points only mean something while some pick is still riding on a score.
+  const showProjection = Array.from(tallies.values()).some(
+    (t) => t.liveWinning + t.liveLosing + t.liveEven > 0 || t.upsetLive !== null,
+  );
   const showUnofficialNote = !!data?.grid.some((row) =>
     data.games.some((g) => row.picks[g.id]?.isCorrect == null && row.picks[g.id] && scoreFor(g, liveScores)),
   );
@@ -95,7 +82,7 @@ export default function GridPage() {
     measure();
     window.addEventListener("resize", measure);
     return () => window.removeEventListener("resize", measure);
-  }, [data]);
+  }, [data, mobileView]);
 
   if (!weeks.length) {
     return (
@@ -140,14 +127,39 @@ export default function GridPage() {
         </div>
       )}
 
+      {!isLoading && !error && data && data.games.length > 0 && (
+        <ToggleGroup
+          type="single"
+          variant="outline"
+          size="sm"
+          value={mobileView}
+          onValueChange={(v) => v && setMobileView(v as "games" | "table")}
+          className="justify-start sm:hidden"
+          data-testid="toggle-grid-view"
+        >
+          <ToggleGroupItem value="games" data-testid="toggle-grid-view-games">By game</ToggleGroupItem>
+          <ToggleGroupItem value="table" data-testid="toggle-grid-view-table">Table</ToggleGroupItem>
+        </ToggleGroup>
+      )}
+
       {!isLoading && !error && data && (
         <>
+          {data.games.length > 0 && (
+            <div className={cn(mobileView === "games" ? "block" : "hidden", "sm:hidden")}>
+              <GridByGame
+                data={data}
+                liveScores={liveScores}
+                currentUserId={user?.id}
+                projected={showProjection ? tallies : null}
+              />
+            </div>
+          )}
           {data.games.length === 0 ? (
             <div className="rounded-lg border border-dashed border-border p-8 text-center text-muted-foreground">
               No games were selected for this week.
             </div>
           ) : (
-            <div className="overflow-x-auto rounded-lg border border-card-border">
+            <div className={cn("overflow-x-auto rounded-lg border border-card-border sm:block", mobileView === "table" ? "block" : "hidden")}>
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-card-border bg-muted/50 text-left text-xs uppercase tracking-wide text-muted-foreground">
@@ -158,6 +170,14 @@ export default function GridPage() {
                     >
                       Pts
                     </th>
+                    {showProjection && (
+                      <th
+                        className="border-r border-card-border px-3 py-2 text-center font-medium whitespace-nowrap"
+                        title="Points if current scores hold (unofficial)"
+                      >
+                        Proj
+                      </th>
+                    )}
                     {data.games.map((g) => (
                       <th key={g.id} className="px-3 py-2 text-center font-medium whitespace-nowrap">
                         <div>
@@ -199,6 +219,7 @@ export default function GridPage() {
                       Consensus
                     </td>
                     <td className="sticky z-20 border-r border-card-border bg-muted px-3 py-2" style={{ left: nameColWidth }} />
+                    {showProjection && <td className="border-r border-card-border px-3 py-2" />}
                     {data.games.map((g) => {
                       const c = data.consensus[g.id];
                       if (!c || c.totalPicks === 0) {
@@ -254,6 +275,14 @@ export default function GridPage() {
                       >
                         {row.weekPoints}
                       </td>
+                      {showProjection && (
+                        <td
+                          className="border-r border-card-border px-3 py-2 text-center italic whitespace-nowrap text-muted-foreground"
+                          data-testid={`text-grid-projected-${row.userId}`}
+                        >
+                          {tallies.get(row.userId)?.projectedPoints ?? row.weekPoints}
+                        </td>
+                      )}
                       {data.games.map((g) => {
                         const pick = row.picks[g.id];
                         const score = scoreFor(g, liveScores);
@@ -284,6 +313,9 @@ export default function GridPage() {
                           row.upsetPick?.result === "win" && "text-green-600 dark:text-green-400 font-medium",
                           row.upsetPick?.result === "loss" && "text-destructive/80",
                           row.upsetPick?.result === "push" && "text-amber-600 dark:text-amber-400",
+                          tallies.get(row.userId)?.upsetLive && "italic",
+                          tallies.get(row.userId)?.upsetLive === "winning" && "text-green-600/80 dark:text-green-400/80",
+                          tallies.get(row.userId)?.upsetLive === "losing" && "text-destructive/60",
                         )}
                         data-testid={`text-grid-upset-${row.userId}`}
                       >
@@ -311,9 +343,9 @@ export default function GridPage() {
             </div>
           )}
           {showUnofficialNote && (
-            <p className="text-xs text-muted-foreground" data-testid="text-grid-unofficial-note">
-              <span className="italic">Italic</span> picks are unofficial, based on the current score. Points count once
-              the week is graded.
+            <p className={cn("text-xs text-muted-foreground sm:block", mobileView === "table" ? "block" : "hidden")} data-testid="text-grid-unofficial-note">
+              <span className="italic">Italic</span> picks{showProjection && " and projected (Proj) points"} are unofficial,
+              based on the current score. Points count once the week is graded.
             </p>
           )}
         </>

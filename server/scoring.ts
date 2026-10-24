@@ -18,7 +18,7 @@ import {
   CRISTO_BALL_HEISMAN_POINTS,
   CRISTO_BALL_PLAYOFF_TEAM_POINTS,
 } from "@shared/schema";
-import { outcomeFromScores, coveringTeam } from "@shared/outcome";
+import { outcomeFromScores, coveringTeam, upsetPickPoints } from "@shared/outcome";
 
 export const ATS_THRESHOLD = 5.5; // spread magnitude above which a pick is ATS instead of straight-up
 
@@ -203,14 +203,8 @@ export async function gradeCompletedGames(weekId: number): Promise<GradeComplete
   };
 }
 
-/** Tiered points for a winning underdog bonus pick, based on the spread magnitude. */
-export function upsetPickPoints(spread: number): number {
-  const s = Math.abs(spread);
-  if (s >= 15) return 3;
-  if (s >= 7.5) return 2;
-  if (s >= 0.5) return 1;
-  return 0;
-}
+// Lives in shared/outcome.ts so the live projection uses the same tiers.
+export { upsetPickPoints };
 
 export interface StandingsRow {
   userId: number;
