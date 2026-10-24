@@ -32,19 +32,30 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (!user || !verifyPassword(parsed.data.password, user.passwordHash)) {
       return res.status(401).json({ message: "Invalid email or password" });
     }
-    const token = generateToken();
-    await storage.updateUser(user.id, { authToken: token });
+    // Members have one session token, shared by every device they log in on,
+    // so logging in on a phone (or the home-screen app, which keeps its own
+    // cookies on iPhone) no longer logs them out everywhere else.
+    let token = user.authToken;
+    if (!token) {
+      token = generateToken();
+      await storage.updateUser(user.id, { authToken: token });
+    }
     setAuthCookie(req, res, token);
     res.json({ user: toPublicUser({ ...user, authToken: token }) });
   });
 
+  // Logs out this device only. Changing your password (or an admin reset)
+  // signs out every device.
   app.post("/api/auth/logout", requireAuth, async (req, res) => {
-    await storage.updateUser(req.user!.id, { authToken: null });
     clearAuthCookie(req, res);
     res.json({ ok: true });
   });
 
   app.get("/api/auth/me", requireAuth, async (req, res) => {
+    // Renew the cookie's lifetime whenever the app opens, so members who
+    // keep using it stay logged in. Header bearer tokens have no cookie to renew.
+    const token = req.user!.authToken;
+    if (token && !req.headers.authorization) setAuthCookie(req, res, token);
     res.json({ user: toPublicUser(req.user!) });
   });
 
@@ -55,10 +66,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (!verifyPassword(parsed.data.currentPassword, req.user!.passwordHash)) {
       return res.status(400).json({ message: "Current password is incorrect" });
     }
+    // A new token signs out every other device; this one stays logged in.
+    const token = generateToken();
     await storage.updateUser(req.user!.id, {
       passwordHash: hashPassword(parsed.data.newPassword),
       mustChangePassword: false,
+      authToken: token,
     });
+    setAuthCookie(req, res, token);
     res.json({ ok: true });
   });
 
