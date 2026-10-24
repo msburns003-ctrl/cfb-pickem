@@ -6,6 +6,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/lib/auth";
+import { ThemeProvider } from "@/lib/theme";
 import { AppShell } from "@/components/AppShell";
 import { AdminNav } from "@/components/AdminNav";
 import NotFound from "@/pages/not-found";
@@ -113,6 +114,7 @@ function AppRouter() {
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
+      <ThemeProvider>
       <TooltipProvider>
         <Toaster />
         <Router hook={useHashLocation}>
@@ -121,6 +123,7 @@ function App() {
           </AuthProvider>
         </Router>
       </TooltipProvider>
+      </ThemeProvider>
     </QueryClientProvider>
   );
 }
