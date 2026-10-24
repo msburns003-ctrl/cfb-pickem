@@ -618,6 +618,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       name: m.name,
       picksSubmitted: weekPicks.filter((p) => p.userId === m.id).length,
       hasUpsetPick: weekUpsetPicks.some((u) => u.userId === m.id),
+      hiddenFromGrid: m.hiddenFromGrid,
     }));
 
     const hasGradedPoints = weekPicks.some((p) => p.pointsEarned != null) || weekUpsetPicks.some((u) => u.pointsEarned != null);

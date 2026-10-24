@@ -13,6 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { useToast } from "@/hooks/use-toast";
 import { ArrowLeft, Plus, Trash2, Trophy, DollarSign, RefreshCw, Download } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { ShareUpdateCard } from "@/components/ShareUpdateCard";
 import { formatEastern, isoToEasternInputValue, easternInputValueToIso } from "@/lib/time";
 import type { GridResponse } from "@/lib/grid-pdf";
 import type { Game, Week } from "@shared/schema";
@@ -463,6 +464,8 @@ export default function AdminWeekDetailPage() {
           })}
         </CardContent>
       </Card>
+
+      <ShareUpdateCard week={week} isLocked={isGridLocked} />
 
       <Card>
         <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3 space-y-0">
