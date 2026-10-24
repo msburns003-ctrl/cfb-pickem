@@ -1,10 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
+import { Link } from "wouter";
+import { Button } from "@/components/ui/button";
+import { LeagueLeaders } from "@/components/LeagueLeaders";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { Trophy, DollarSign, CheckCircle2, Circle, ArrowUp, ArrowDown, Minus } from "lucide-react";
+import { BarChart3, Trophy, DollarSign, CheckCircle2, Circle, ArrowUp, ArrowDown, Minus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth";
-import type { Week } from "@shared/schema";
+import type { SeasonStatsResponse, Week } from "@shared/schema";
 
 interface StandingsRow {
   userId: number;
@@ -65,6 +68,7 @@ function rankBadgeClass(rank: number) {
 export default function StandingsPage() {
   const { user } = useAuth();
   const { data, isLoading } = useQuery<StandingsResponse>({ queryKey: ["/api/standings"] });
+  const { data: stats } = useQuery<SeasonStatsResponse>({ queryKey: ["/api/stats"] });
 
   if (isLoading || !data) {
     return (
@@ -86,9 +90,17 @@ export default function StandingsPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="font-display text-xl font-semibold tracking-tight flex items-center gap-2">
-        <Trophy className="h-5 w-5 text-accent" /> Season Standings
-      </h1>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="font-display text-xl font-semibold tracking-tight flex items-center gap-2">
+          <Trophy className="h-5 w-5 text-accent" /> Season Standings
+        </h1>
+        <Button asChild variant="outline" size="sm">
+          <Link href="/stats" data-testid="link-my-stats">
+            <BarChart3 className="h-4 w-4" /> My stats
+          </Link>
+        </Button>
+      </div>
+      {stats && stats.weeks.length > 0 && <LeagueLeaders data={stats} />}
       <div className="overflow-x-auto rounded-lg border border-card-border">
         <table className="w-full text-sm">
           <thead>
@@ -123,8 +135,10 @@ export default function StandingsPage() {
                 <td className="px-3 py-2">
                   <RankChangeIndicator rank={row.rank} previousRank={row.previousRank} />
                 </td>
-                <td className="px-3 py-2 font-medium">
-                  {row.name}
+                <td className="px-3 py-2 font-medium whitespace-nowrap">
+                  <Link href={`/stats/${row.userId}`} className="hover:underline" data-testid={`link-stats-${row.userId}`}>
+                    {row.name}
+                  </Link>
                   {row.userId === user?.id && <span className="ml-1.5 text-xs text-muted-foreground">(you)</span>}
                 </td>
                 {data.weeks.map((w) => (

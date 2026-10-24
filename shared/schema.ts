@@ -303,3 +303,40 @@ export interface LiveScoresResponse {
   scores: Record<number, LiveScore>; // keyed by game id
   fetchedAt: string;
 }
+
+// ---------- Season stats (computed from graded picks) ----------
+export interface PickRecord {
+  wins: number;
+  losses: number;
+  pushes: number;
+}
+
+export interface MemberWeekStat {
+  weekId: number;
+  points: number;
+  weekRank: number; // ties share a rank
+  seasonRank: number; // rank on cumulative weekly points through this week
+}
+
+export interface MemberSeasonStats {
+  userId: number;
+  name: string;
+  rank: number;
+  totalPoints: number;
+  overall: PickRecord;
+  ats: PickRecord;
+  su: PickRecord;
+  money: PickRecord;
+  upsets: PickRecord & { points: number };
+  weeks: MemberWeekStat[];
+  weeklyWins: number; // outright top score
+  weeklyPushes: number; // tied for top score
+  bestWeek: { weekId: number; points: number } | null;
+  longestStreak: number; // consecutive correct picks, in kickoff order
+  currentStreak: number; // positive = correct in a row, negative = misses in a row
+}
+
+export interface SeasonStatsResponse {
+  weeks: { id: number; label: string; weekNumber: number; leagueAverage: number }[];
+  members: MemberSeasonStats[];
+}

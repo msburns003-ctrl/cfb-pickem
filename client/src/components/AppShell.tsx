@@ -28,6 +28,11 @@ const navItems = [
   { href: "/standings", label: "Standings", icon: Trophy },
 ];
 
+// Stats pages live under Standings in the navigation.
+function isActive(href: string, location: string) {
+  return location.startsWith(href) || (href === "/standings" && location.startsWith("/stats"));
+}
+
 export function AppShell({ children }: { children: ReactNode }) {
   const { user, logout } = useAuth();
   const [location] = useLocation();
@@ -45,7 +50,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <nav className="flex items-center gap-1">
             {/* Main links live in the bottom tab bar on phones. */}
             {items.map((item) => {
-              const active = location.startsWith(item.href);
+              const active = isActive(item.href, location);
               const Icon = item.icon;
               return (
                 <Link
@@ -99,7 +104,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       >
         <div className="flex">
           {items.map((item) => {
-            const active = location.startsWith(item.href);
+            const active = isActive(item.href, location);
             const Icon = item.icon;
             return (
               <Link
