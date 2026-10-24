@@ -7,7 +7,10 @@ import { LayoutGrid, Lock, TrendingUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth";
 import { formatEastern } from "@/lib/time";
-import type { Game, Week } from "@shared/schema";
+import { useNow } from "@/hooks/use-now";
+import { useLiveScores } from "@/hooks/use-live-scores";
+import { livePickStatus } from "@shared/outcome";
+import type { Game, LiveScore, Week } from "@shared/schema";
 
 interface GridRow {
   userId: number;
@@ -47,6 +50,15 @@ function shortTeam(name: string) {
   return name.length > 12 ? name.slice(0, 11) + "…" : name;
 }
 
+// Saved final score if there is one, else ESPN's live score. Graded games
+// need neither: their cells already show the official result.
+function scoreFor(game: Game, live: Record<number, LiveScore>): LiveScore | undefined {
+  if (game.status === "final" && game.awayScore != null && game.homeScore != null) {
+    return { state: "post", awayScore: game.awayScore, homeScore: game.homeScore, detail: "Final" };
+  }
+  return live[game.id];
+}
+
 function shortTeamLabel(name: string, rank: number | null) {
   const label = shortTeam(name);
   return rank ? `#${rank} ${label}` : label;
@@ -67,6 +79,12 @@ export default function GridPage() {
     queryKey: [`/api/weeks/${activeWeekId}/grid`],
     enabled: !!activeWeekId,
   });
+
+  const now = useNow();
+  const liveScores = useLiveScores(activeWeekId, data?.games ?? [], now);
+  const showUnofficialNote = !!data?.grid.some((row) =>
+    data.games.some((g) => row.picks[g.id]?.isCorrect == null && row.picks[g.id] && scoreFor(g, liveScores)),
+  );
 
   // Measure the actual rendered width of the Member column (it hugs its
   // content) so the pinned Pts column can sit flush against it with no gap.
@@ -150,6 +168,22 @@ export default function GridPage() {
                           {g.favoriteTeam === g.awayTeam ? "-" : "+"}
                           {g.spread} · {formatEastern(g.kickoff, { weekday: "short", hour: "numeric", minute: "2-digit" })}
                         </div>
+                        {(() => {
+                          const score = scoreFor(g, liveScores);
+                          if (!score) return null;
+                          return (
+                            <div
+                              className={cn(
+                                "mt-0.5 text-[11px] font-semibold normal-case",
+                                score.state === "in" ? "text-destructive" : "text-foreground",
+                              )}
+                              data-testid={`text-grid-score-${g.id}`}
+                            >
+                              {score.state === "in" ? "Live" : "Final"} {score.awayScore}–{score.homeScore}
+                              {score.state === "in" && <span className="font-normal text-muted-foreground"> · {score.detail}</span>}
+                            </div>
+                          );
+                        })()}
                       </th>
                     ))}
                     <th className="px-3 py-2 text-center font-medium whitespace-nowrap">
@@ -222,6 +256,11 @@ export default function GridPage() {
                       </td>
                       {data.games.map((g) => {
                         const pick = row.picks[g.id];
+                        const score = scoreFor(g, liveScores);
+                        const status =
+                          pick && pick.isCorrect == null && score
+                            ? livePickStatus(g, pick.selectedTeam, score.awayScore, score.homeScore)
+                            : null;
                         return (
                           <td
                             key={g.id}
@@ -229,6 +268,9 @@ export default function GridPage() {
                               "px-3 py-2 text-center whitespace-nowrap",
                               pick?.isCorrect === true && "text-green-600 dark:text-green-400 font-medium",
                               pick?.isCorrect === false && "text-destructive/80",
+                              status && "italic",
+                              status === "winning" && "text-green-600/80 dark:text-green-400/80",
+                              status === "losing" && "text-destructive/60",
                             )}
                           >
                             {pick ? shortTeam(pick.selectedTeam) : <span className="text-muted-foreground">—</span>}
@@ -267,6 +309,12 @@ export default function GridPage() {
                 </tbody>
               </table>
             </div>
+          )}
+          {showUnofficialNote && (
+            <p className="text-xs text-muted-foreground" data-testid="text-grid-unofficial-note">
+              <span className="italic">Italic</span> picks are unofficial, based on the current score. Points count once
+              the week is graded.
+            </p>
           )}
         </>
       )}

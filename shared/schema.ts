@@ -290,3 +290,16 @@ export const insertCristoBallResultsSchema = z.object({
   actualHeisman: z.string().nullable().optional(),
 });
 export type InsertCristoBallResults = z.infer<typeof insertCristoBallResultsSchema>;
+
+// ---------- Live scores (in-memory from ESPN, never stored) ----------
+export interface LiveScore {
+  state: "in" | "post";
+  awayScore: number;
+  homeScore: number;
+  detail: string; // e.g. "3rd 4:12", "Halftime", "Final"
+}
+
+export interface LiveScoresResponse {
+  scores: Record<number, LiveScore>; // keyed by game id
+  fetchedAt: string;
+}

@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { useNow } from "@/hooks/use-now";
+import { useLiveScores } from "@/hooks/use-live-scores";
 import { formatEastern } from "@/lib/time";
 import { Sparkles, ArrowRight, Save } from "lucide-react";
 import type { Game, Pick, UpsetPick, Week } from "@shared/schema";
@@ -49,6 +50,7 @@ export default function DashboardPage() {
   const now = useNow();
   const weekLocked = !!data && (data.locked || now >= new Date(data.week.pickDeadline).getTime());
   const hasKickedOff = (game: Game) => now >= new Date(game.kickoff).getTime();
+  const liveScores = useLiveScores(activeWeekId, data?.games ?? [], now);
 
   // Selecting a team only updates this local map — nothing hits the network
   // until the member presses "Save picks". Keyed by gameId so switching back
@@ -435,6 +437,7 @@ export default function DashboardPage() {
                   unsaved={unsavedGameIds.includes(game.id)}
                   locked={weekLocked || kickedOff}
                   kickedOff={kickedOff && !weekLocked}
+                  live={liveScores[game.id]}
                   onSelect={(team) => setLocalPicks((prev) => new Map(prev).set(game.id, team))}
                 />
               );

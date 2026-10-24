@@ -11,6 +11,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
+import { useNow } from "@/hooks/use-now";
+import { useLiveScores } from "@/hooks/use-live-scores";
 import { ArrowLeft, Plus, Trash2, Trophy, DollarSign, RefreshCw, Download } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ShareUpdateCard } from "@/components/ShareUpdateCard";
@@ -24,6 +26,10 @@ interface AdminWeekResponse {
   pickProgress: { userId: number; name: string; picksSubmitted: number; hasUpsetPick: boolean }[];
   ATS_THRESHOLD: number;
   weeklyWinners: { userId: number; name: string; points: number }[];
+  autoGrade: {
+    enabled: boolean;
+    status: { lastRunAt: string; savedScores: number; graded: boolean; error: string | null } | null;
+  };
 }
 
 const emptyGameForm = { awayTeam: "", homeTeam: "", favoriteTeam: "", spread: "", kickoff: "", broadcast: "" };
@@ -186,9 +192,12 @@ export default function AdminWeekDetailPage() {
     onError: (err) => toast({ title: "Couldn't check games", description: err instanceof Error ? err.message : undefined, variant: "destructive" }),
   });
 
+  const now = useNow();
+  const liveScores = useLiveScores(weekId, data?.games.filter((g) => g.isSelected) ?? [], now);
+
   if (isLoading || !data) return <p className="text-muted-foreground">Loading...</p>;
 
-  const { week, games, pickProgress, weeklyWinners } = data;
+  const { week, games, pickProgress, weeklyWinners, autoGrade } = data;
   const isGridLocked = week.status !== "open" || Date.now() >= new Date(week.pickDeadline).getTime();
   const payoutAmountValue = payoutDraft ?? (week.payoutAmount != null ? String(week.payoutAmount) : "");
   const selectedGames = games.filter((g) => g.isSelected);
@@ -196,6 +205,8 @@ export default function AdminWeekDetailPage() {
   const finalSelectedGames = selectedGames.filter((g) => g.status === "final");
   const allSelectedFinal = selectedGames.length > 0 && selectedGames.every((g) => g.status === "final");
   const anySelectedFinal = finalSelectedGames.length > 0;
+  // Selected games ESPN reports as final that haven't been saved here yet.
+  const espnFinalCount = selectedGames.filter((g) => g.status !== "final" && liveScores[g.id]?.state === "post").length;
 
   return (
     <div className="flex flex-col gap-6">
@@ -393,6 +404,31 @@ export default function AdminWeekDetailPage() {
           </div>
         </CardHeader>
         <CardContent className="flex flex-col gap-2">
+          <p className="text-xs text-muted-foreground" data-testid="text-auto-grade-status">
+            {autoGrade.enabled ? (
+              <>
+                Automatic scoring is on: final scores are saved from ESPN and graded every 5 minutes once picks lock.
+                {autoGrade.status &&
+                  (autoGrade.status.error
+                    ? ` Last run ${formatEastern(autoGrade.status.lastRunAt, { hour: "numeric", minute: "2-digit" })} failed: ${autoGrade.status.error}. Use the buttons to score manually.`
+                    : ` Last run ${formatEastern(autoGrade.status.lastRunAt, { hour: "numeric", minute: "2-digit" })}: saved ${autoGrade.status.savedScores} score${autoGrade.status.savedScores === 1 ? "" : "s"}${autoGrade.status.graded ? ", graded" : ""}.`)}
+              </>
+            ) : (
+              "Automatic scoring is off. Use Check Games and Grade to score this week."
+            )}
+          </p>
+          {espnFinalCount > 0 && (
+            <p className="rounded-md bg-muted px-3 py-2 text-sm" data-testid="text-espn-final-hint">
+              ESPN shows {espnFinalCount} selected game{espnFinalCount === 1 ? "" : "s"} as final.{" "}
+              {autoGrade.enabled ? (
+                "They'll be saved and graded automatically within 5 minutes."
+              ) : (
+                <>
+                  Click <span className="font-medium">Check Games</span> to save the score{espnFinalCount === 1 ? "" : "s"}, then grade.
+                </>
+              )}
+            </p>
+          )}
           {games.length === 0 && <p className="text-sm text-muted-foreground">No games yet. Add candidates to build this week's slate.</p>}
           {games.map((game) => {
             const draft = scoreDrafts[game.id] ?? { away: game.awayScore?.toString() ?? "", home: game.homeScore?.toString() ?? "" };

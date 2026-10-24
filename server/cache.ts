@@ -125,6 +125,7 @@ export const keys = {
   grid: (weekId: number) => `grid:v1:${weekId}`,
   dashboard: (userId: number, weekId: number) =>
     `dashboard:v1:${userId}:${weekId}`,
+  liveScores: (weekId: number) => `live:v1:${weekId}`,
 } as const;
 
 export const prefixes = {
