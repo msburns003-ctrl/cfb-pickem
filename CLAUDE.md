@@ -29,6 +29,7 @@ Environment variables (`.env`, never committed):
 | `SUPABASE_URL` | Supabase project URL |
 | `SUPABASE_ANON_KEY` | Supabase anon key used by the server |
 | `PORT` | Optional, defaults to 5000 |
+| `AUTO_GRADE` | Optional. Automatic scoring is on in production and off in local dev; set `on` or `off` to override. Leave it off locally unless you mean to write to the production database. |
 
 Note: the session cookie uses the `__Host-` prefix and is always `Secure`, so a browser over plain `http://localhost` will not store it. Test logged-in flows against the deployed HTTPS site, or with `curl` using a cookie jar.
 
@@ -49,7 +50,8 @@ server/
   routes.ts             all /api routes (public + /api/admin/*)
   auth.ts               password hashing (scrypt), session cookie, temp passwords
   scoring.ts            grading, ATS logic, upset points, standings
-  scores.ts             fetches final scores from the ESPN public scoreboard
+  scores.ts             fetches live and final scores from the ESPN public scoreboard
+  auto-grade.ts         background job: saves final scores and grades automatically
   storage.ts            all Supabase reads/writes
   cache.ts              in-memory response caching
 shared/schema.ts        types and Zod validation shared by client and server
@@ -71,7 +73,7 @@ League rules (already decided, do not change without the commissioner's approval
 - **One upset pick per member per week**, scored by `upsetPickPoints(spread)`: spread ≥ 15 → 3 pts, ≥ 7.5 → 2 pts, ≥ 0.5 → 1 pt.
 - **Tied members share the same rank** in standings (no tiebreaker). A tie for a weekly win shows as a PUSH.
 - Games are auto-populated each week; the admin chooses the slate by toggling `isSelected`.
-- Grading runs through the app's own admin API (`POST /api/admin/weeks/:id/grade`).
+- Grading runs through the app's own grading code (`gradeCompletedGames` in `server/scoring.ts`). It runs automatically: every 5 minutes `server/auto-grade.ts` saves final scores from ESPN and grades once the week's picks are locked. Admins can still check and grade manually (`POST /api/admin/weeks/:id/check-games` and `/grade`), and hand-entered scores are never overwritten.
 - Members log in with email and password.
 
 Security rules:

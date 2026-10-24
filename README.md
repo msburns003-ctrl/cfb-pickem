@@ -12,7 +12,9 @@ The 2026 college football pick'em league app. Members log in, pick each week's s
 - **Grid:** see everyone's picks for the week, with a PDF export.
 - **Standings:** weekly and season totals.
 - **Cristo-Ball:** season-long preseason predictions.
-- **Admin tools:** manage weeks and the game slate, grade weeks from final scores, manage members and reset passwords.
+- **Live scores:** in-progress scores on game cards and the grid, with whether your pick is winning or covering.
+- **Automatic scoring:** final scores are pulled from ESPN and graded every 5 minutes once picks lock. No manual step needed.
+- **Admin tools:** manage weeks and the game slate, enter or correct scores, manage members and reset passwords.
 
 ## League rules
 

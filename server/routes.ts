@@ -16,6 +16,7 @@ import {
 } from "./scoring";
 import { insertWeekSchema, type InsertWeek, insertCristoBallEntrySchema, insertCristoBallResultsSchema, insertCristoBallLockDeadlineSchema } from "@shared/schema";
 import { checkGamesForWeek, getLiveScoresForWeek } from "./scores";
+import { autoGradeEnabled, getAutoGradeStatus } from "./auto-grade";
 import { z } from "zod";
 import { cached, invalidate, keys, prefixes, cacheStats } from "./cache";
 
@@ -655,7 +656,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         .map((m) => ({ userId: m.id, name: m.name, points: maxPoints }));
     }
 
-    res.json({ week, games: allGames, pickProgress, ATS_THRESHOLD, weeklyWinners });
+    res.json({
+      week,
+      games: allGames,
+      pickProgress,
+      ATS_THRESHOLD,
+      weeklyWinners,
+      autoGrade: { enabled: autoGradeEnabled(), status: getAutoGradeStatus(weekId) },
+    });
   });
 
   // ---------------- ADMIN: GAME CANDIDATES / SELECTION ----------------
