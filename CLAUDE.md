@@ -1,0 +1,104 @@
+# CFB Pick'em — Guide for Claude Code
+
+This is the 2026 college football pick'em league app. Live site: https://cfb-pickem.pplx.app
+
+Read this file before making changes. The "Rules that must not break" section lists product and security decisions the league has already settled.
+
+## Stack
+
+- **Frontend:** React + TypeScript + Vite, Tailwind CSS, shadcn/ui (Radix) components, TanStack Query, wouter routing. Source in `client/src/`.
+- **Backend:** Express (TypeScript, run with `tsx`). Source in `server/`.
+- **Shared types:** `shared/schema.ts` (Zod schemas + TypeScript types used by both sides).
+- **Database:** Supabase Postgres, accessed only from the server through `@supabase/supabase-js` (`server/supabase.ts`, `server/storage.ts`). There is no ORM and no Supabase Realtime.
+- **Hosting:** Perplexity `pplx.app` (static frontend + proxied Express backend) with Supabase as the database.
+
+## Running locally
+
+```bash
+npm install
+cp .env.example .env   # then fill in SUPABASE_URL and SUPABASE_ANON_KEY
+npm run dev            # Express + Vite dev server on http://localhost:5000
+npm run check          # TypeScript type check (must pass before committing)
+npm run build          # production build into dist/
+```
+
+Environment variables (`.env`, never committed):
+
+| Variable | Purpose |
+|---|---|
+| `SUPABASE_URL` | Supabase project URL |
+| `SUPABASE_ANON_KEY` | Supabase anon key used by the server |
+| `PORT` | Optional, defaults to 5000 |
+
+Note: the session cookie uses the `__Host-` prefix and is always `Secure`, so a browser over plain `http://localhost` will not store it. Test logged-in flows against the deployed HTTPS site, or with `curl` using a cookie jar.
+
+**Local dev talks to the real production database.** There is no separate staging database. Be careful with anything that writes data (grading, imports, seeding, deleting).
+
+## Project layout
+
+```
+client/src/
+  App.tsx               routes
+  lib/queryClient.ts    fetch wrapper; API_BASE uses the "__PORT_5000__" placeholder
+  lib/auth.tsx          auth context (session lives in an httpOnly cookie only)
+  lib/grid-pdf.ts       weekly grid PDF export
+  pages/                dashboard, grid, standings, cristoball, profile, login
+  pages/admin/          weeks, week-detail, members, cristoball admin
+server/
+  index.ts              Express entry
+  routes.ts             all /api routes (public + /api/admin/*)
+  auth.ts               password hashing (scrypt), session cookie, temp passwords
+  scoring.ts            grading, ATS logic, upset points, standings
+  scores.ts             fetches final scores from the ESPN public scoreboard
+  storage.ts            all Supabase reads/writes
+  cache.ts              in-memory response caching
+shared/schema.ts        types and Zod validation shared by client and server
+script/build.ts         production build
+script/seed.ts          one-time admin seed (generates a random temp password)
+supabase_migration.sql  database schema
+add_members.py          bulk member add (prompts for admin credentials)
+security_review_*.md    past security reviews
+```
+
+Main tables: `users`, `weeks`, `games`, `picks`, `upset_picks`, plus the Cristo-Ball tables. See `supabase_migration.sql`.
+
+## Rules that must not break
+
+League rules (already decided, do not change without the commissioner's approval):
+
+- A game is picked **against the spread (ATS)** when `abs(spread) > 5.5`, otherwise **straight up (SU)**. See `ATS_THRESHOLD` in `server/scoring.ts`.
+- **Money games** are worth 2 points. How many there are each week (`moneyGameCount`) varies by week.
+- **One upset pick per member per week**, scored by `upsetPickPoints(spread)`: spread ≥ 15 → 3 pts, ≥ 7.5 → 2 pts, ≥ 0.5 → 1 pt.
+- **Tied members share the same rank** in standings (no tiebreaker). A tie for a weekly win shows as a PUSH.
+- Games are auto-populated each week; the admin chooses the slate by toggling `isSelected`.
+- Grading runs through the app's own admin API (`POST /api/admin/weeks/:id/grade`).
+- Members log in with email and password.
+
+Security rules:
+
+- **No `localStorage`, `sessionStorage`, or `indexedDB` anywhere in the client bundle.** The session lives in an httpOnly cookie only.
+- **Cookie names must use the `__Host-` prefix** (`Secure`, `Path=/`, no `Domain`). The pplx.app proxy drops any other cookie name.
+- **Never commit secrets**: no passwords, API keys, Supabase keys, or member credential files. `.env`, `*.db` files, and `league_members_temp_passwords.csv` are git-ignored; keep it that way.
+- Passwords are hashed with scrypt in `salt:hash` format (`server/auth.ts`). Never log or return password hashes or session tokens.
+- Every `/api/admin/*` route must require an admin session. Validate request bodies with Zod.
+- The frontend calls the API through `API_BASE` in `client/src/lib/queryClient.ts`. Keep the `"__PORT_5000__"` placeholder exactly as is; the deploy step rewrites it. Don't hard-code hostnames.
+
+## How changes get deployed
+
+**Pushing to GitHub does not update the live site.** The live site is published from Perplexity Computer, which builds from this repo.
+
+Workflow:
+
+1. Make changes on a branch or on `main`, run `npm run check` (and `npm run build`), then commit and push to GitHub.
+2. Every code or feature change needs a short **security review** document before it is published (see the `security_review_*.md` files for the format). Data-only work like game imports, picks, password resets and grading doesn't need one.
+3. In Perplexity, ask Computer to **pull the latest code from GitHub** and publish. It will build, review, and ask before publishing. It never auto-publishes.
+
+To keep the two copies in sync, always push your Claude Code work to GitHub before asking Perplexity to make further changes.
+
+## Coding conventions
+
+- TypeScript everywhere; `npm run check` must pass with zero errors.
+- Keep all database access inside `server/storage.ts`; routes call storage methods.
+- Reuse existing shadcn/ui components in `client/src/components/ui/` rather than adding new UI libraries.
+- Times are stored in UTC and displayed in Eastern Time.
+- Keep commits small, with clear messages describing the user-visible change.

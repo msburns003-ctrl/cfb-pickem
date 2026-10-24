@@ -1,7 +1,14 @@
+import getpass
 import json
+import os
 import urllib.request
 
-BASE = "http://localhost:5000"
+# Admin credentials are read at runtime -- never hard-code them in this file.
+#   ADMIN_EMAIL=you@example.com python3 add_members.py
+# The password is taken from ADMIN_PASSWORD if set, otherwise prompted for.
+BASE = os.environ.get("BASE_URL", "http://localhost:5000")
+ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL") or input("Admin email: ").strip()
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD") or getpass.getpass("Admin password: ")
 
 members = [
     ("Boyer", "Jnboyer91@gmail.com"),
@@ -61,7 +68,7 @@ def post(path, body, token=None):
         return e.code, json.loads(e.read())
 
 
-status, data = post("/api/auth/login", {"email": "msburns003@gmail.com", "password": "gridiron2026"})
+status, data = post("/api/auth/login", {"email": ADMIN_EMAIL, "password": ADMIN_PASSWORD})
 if status != 200:
     print("LOGIN FAILED", status, data)
     raise SystemExit(1)
@@ -69,7 +76,7 @@ token = data["token"]
 
 results = []
 for name, email in members:
-    if email.lower().strip() == "msburns003@gmail.com":
+    if email.lower().strip() == ADMIN_EMAIL.lower():
         results.append((name, email, "skip: this is the admin account"))
         continue
     status, data = post("/api/admin/members", {"name": name, "email": email}, token=token)
