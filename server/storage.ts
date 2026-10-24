@@ -309,20 +309,15 @@ export class DatabaseStorage implements IStorage {
     return rowToCamel<Pick>(data);
   }
   async upsertPick(pick: InsertPick): Promise<Pick> {
-    const existing = await this.getPick(pick.gameId, pick.userId);
-    if (existing) {
-      const { data, error } = await supabase
-        .from("picks")
-        .update({ selected_team: pick.selectedTeam, submitted_at: pick.submittedAt })
-        .eq("id", existing.id)
-        .select()
-        .single();
-      assertNoError(error, "upsertPick(update)");
-      return rowToCamel<Pick>(data)!;
-    }
-    const payload = objectToSnake(pick);
-    const { data, error } = await supabase.from("picks").insert(payload).select().single();
-    assertNoError(error, "upsertPick(insert)");
+    // Single atomic INSERT ... ON CONFLICT, so two saves for the same game
+    // arriving together (two tabs, a retry) can't race into a unique
+    // violation. Only these columns are written, so grading fields survive.
+    const { data, error } = await supabase
+      .from("picks")
+      .upsert(objectToSnake(pick), { onConflict: "game_id,user_id" })
+      .select()
+      .single();
+    assertNoError(error, "upsertPick");
     return rowToCamel<Pick>(data)!;
   }
   async updatePick(id: number, fields: Partial<Pick>): Promise<Pick | undefined> {

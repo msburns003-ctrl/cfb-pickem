@@ -29,6 +29,9 @@ type Entry = { data: unknown; expires: number };
 
 const store = new Map<string, Entry>();
 const inflight = new Map<string, Promise<unknown>>();
+// Bumped by invalidate(). A fetch that started before an invalidation may
+// have read pre-write data, so it must not be stored or shared afterwards.
+let generation = 0;
 
 // Simple counters — reset on process restart. Not for production alerting;
 // just for eyeballing effectiveness during rollout.
@@ -60,13 +63,16 @@ export async function cached<T>(
   }
 
   stats.misses++;
-  const promise = (async () => {
+  const startGeneration = generation;
+  const promise: Promise<T> = (async () => {
     try {
       const data = await fn();
-      store.set(key, { data, expires: Date.now() + ttlMs });
+      if (generation === startGeneration) {
+        store.set(key, { data, expires: Date.now() + ttlMs });
+      }
       return data;
     } finally {
-      inflight.delete(key);
+      if (inflight.get(key) === promise!) inflight.delete(key);
     }
   })();
   inflight.set(key, promise);
@@ -79,6 +85,12 @@ export async function cached<T>(
  * recomputes fresh data.
  */
 export function invalidate(prefix: string): number {
+  generation++;
+  // Drop in-flight fetches too, so a read issued after this write can't
+  // piggy-back on a fetch that started before it.
+  for (const k of Array.from(inflight.keys())) {
+    if (k.startsWith(prefix)) inflight.delete(k);
+  }
   let removed = 0;
   // Snapshot keys to a plain array to avoid downlevelIteration issues and
   // to be safe against Map mutation during traversal.

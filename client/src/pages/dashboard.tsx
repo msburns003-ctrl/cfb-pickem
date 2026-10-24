@@ -105,11 +105,19 @@ export default function DashboardPage() {
       });
       return { previous, stagedSnapshot };
     },
-    onSuccess: (result) => {
+    onSuccess: (result, _variables, ctx) => {
       // Any picks the server rejected need to be re-staged so the user can
       // fix and retry. Everything else stays as we already optimistically
       // applied it.
       if (result.skipped.length > 0) {
+        setLocalPicks((prev) => {
+          const next = new Map(prev);
+          result.skipped.forEach((s) => {
+            const staged = ctx?.stagedSnapshot?.get(s.gameId);
+            if (staged) next.set(s.gameId, staged);
+          });
+          return next;
+        });
         const detail = result.skipped
           .map((s) => {
             const game = data?.games.find((g) => g.id === s.gameId);
@@ -135,8 +143,12 @@ export default function DashboardPage() {
     // back to rolling back to the pre-mutation snapshot captured in onMutate.
     onError: async (err, variables, ctx) => {
       try {
+        // staleTime: 0 forces a real network request. Without it fetchQuery
+        // hands back the optimistic patch from onMutate (it counts as fresh
+        // data), so a failed save looked like it had gone through.
         const fresh = await queryClient.fetchQuery<DashboardResponse>({
           queryKey: [`/api/weeks/${activeWeekId}/dashboard`],
+          staleTime: 0,
         });
         const freshByGame = new Map(fresh.myPicks.map((p) => [p.gameId, p.selectedTeam]));
         const actuallySaved = variables.filter((v) => freshByGame.get(v.gameId) === v.selectedTeam);
@@ -247,8 +259,12 @@ export default function DashboardPage() {
     // snapshot captured in onMutate.
     onError: async (err, gameId, ctx) => {
       try {
+        // staleTime: 0 forces a real network request. Without it fetchQuery
+        // hands back the optimistic patch from onMutate (it counts as fresh
+        // data), so a failed save looked like it had gone through.
         const fresh = await queryClient.fetchQuery<DashboardResponse>({
           queryKey: [`/api/weeks/${activeWeekId}/dashboard`],
+          staleTime: 0,
         });
         // Server truth replaces the optimistic patch either way — if the
         // upset pick didn't actually land, this correctly clears it instead
