@@ -42,7 +42,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="sticky top-0 z-40 border-b border-border bg-sidebar text-sidebar-foreground">
+      <header className="sticky top-0 z-40 border-b border-border bg-sidebar pt-[env(safe-area-inset-top)] text-sidebar-foreground">
         <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-4 py-3">
           <Link href="/dashboard" className="flex items-center gap-2 shrink-0">
             <Logo />

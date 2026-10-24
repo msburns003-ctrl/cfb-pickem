@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link } from "wouter";
 import { BarChart3 } from "lucide-react";
+import { InstallAppCard } from "@/components/InstallAppCard";
 import { useAuth } from "@/lib/auth";
 import { apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
@@ -51,6 +52,8 @@ export default function ProfilePage() {
           </Button>
         </CardContent>
       </Card>
+
+      <InstallAppCard />
 
       <Card>
         <CardHeader>
