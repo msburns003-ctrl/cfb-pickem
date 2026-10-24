@@ -17,7 +17,7 @@ None.
 - **Pre-existing dependency advisories** — `npm audit --omit=dev` reports advisories in `body-parser` (high), `dompurify` (critical) and `postcss-selector-parser` (moderate). The same report appears without this change; no dependencies were added or changed here. Most have a fix via `npm audit fix`; worth doing as a separate change.
 
 ### PASS
-- **Auth on mutations** — No routes added or changed. `POST /api/weeks/:id/picks`, `/picks/batch` and `/upset-pick` are still gated by `requireAuth`, and `userId` still comes from the session (`req.user!.id`), never the request body.
+- **Auth on mutations** — No routes added; only `/upset-pick` gained an extra check (below). `POST /api/weeks/:id/picks`, `/picks/batch` and `/upset-pick` are still gated by `requireAuth`, and `userId` still comes from the session (`req.user!.id`), never the request body.
 - **Upset-pick guard (server/routes.ts)** — New check tightens an existing authenticated route; it reads only the caller's own upset pick (`req.user!.id`) and returns a generic message. Client-side kickoff locks are convenience only; the server checks remain the source of truth.
 - **Database write (server/storage.ts)** — `upsertPick` writes only `game_id`, `user_id`, `selected_team`, `submitted_at` (from the validated `InsertPick`), so grading columns (`is_correct`, `points_earned`) can't be set or cleared by a member. Conflict target matches the existing `unique (game_id, user_id)` constraint. Errors still go through `assertNoError`; nothing new returned to the client.
 - **Cache (server/cache.ts)** — Change only makes invalidation stricter (drops in-flight reads, skips storing reads that began before a write). Cache keys are unchanged and still scoped per user, so no cross-user data exposure.
