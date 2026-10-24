@@ -1,6 +1,6 @@
 # Pre-Publish Security Review — ESPN Game Import and Automatic Next Week
 
-**Scope:** Branch `claude/epic-bohr-tjyw9y` — imports a week's games and betting lines from ESPN, and creates the next week automatically once the latest week is graded. Files touched: `server/schedule.ts` (new), `server/scores.ts` (exported helpers and ESPN types), `server/auto-grade.ts`, `server/routes.ts`, `client/src/pages/admin/week-detail.tsx`, `CLAUDE.md`, `README.md`. No new dependencies, schema or auth changes.
+**Scope:** Branch `claude/epic-bohr-tjyw9y` — imports a week's games and betting lines from ESPN, and creates the next week automatically once the latest week is graded. Files touched: `server/schedule.ts` (new), `server/scores.ts` (exported helpers, ESPN types, FBS group on score checks), `server/auto-grade.ts`, `server/routes.ts`, `client/src/pages/admin/week-detail.tsx`, `CLAUDE.md`, `README.md`. No new dependencies, schema or auth changes.
 
 ## What changed
 
@@ -11,6 +11,7 @@
   An existing game matches by ESPN id or by both team names (the existing, conservative matcher), so hand-entered or previously imported games aren't duplicated.
 - **Automatic next week** (in the existing production-only background job): when the season's latest week is `graded` and the next doesn't exist, it creates it in `setup` (hidden from members until the admin opens it) with the deadline one week later at the same Eastern time (DST-safe), the same money game count, and ESPN's games imported. It skips if the new deadline is already past or ESPN lists no games, and tries at most every 6 hours.
 - **Admin week page:** an "Import from ESPN" button, with a list of games that had no line.
+- **Scoring fix:** score checks ("Check Games", automatic scoring and live scores) now also request every FBS game (`groups=80`). Before, they used ESPN's default scoreboard, which can omit unranked games, leaving them for manual entry. Same endpoint and parsing; only the query parameter changed.
 
 ## Findings
 

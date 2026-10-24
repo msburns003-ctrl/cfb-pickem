@@ -65,7 +65,10 @@ function espnDateCandidates(iso: string): string[] {
   return primary === shifted ? [primary] : [primary, shifted];
 }
 
-// `groups=80` asks for every FBS game rather than ESPN's default featured set.
+// ESPN's FBS group. Without it the scoreboard returns only its default
+// featured set, which can leave unranked games on our slate unmatched.
+export const FBS_GROUP = "80";
+
 export async function fetchEspnScoreboardByDate(dateStr: string, groups?: string): Promise<EspnEvent[]> {
   const url = `${ESPN_SCOREBOARD_URL}?dates=${dateStr}&limit=500${groups ? `&groups=${groups}` : ""}`;
   try {
@@ -181,7 +184,7 @@ function matchScores(match: MatchedEvent): { awayScore: number; homeScore: numbe
 
 async function fetchEventsForGames(games: Game[]): Promise<EspnEvent[]> {
   const uniqueDates = Array.from(new Set(games.flatMap((g) => espnDateCandidates(g.kickoff))));
-  const eventsByDate = await Promise.all(uniqueDates.map((d) => fetchEspnScoreboardByDate(d)));
+  const eventsByDate = await Promise.all(uniqueDates.map((d) => fetchEspnScoreboardByDate(d, FBS_GROUP)));
   return eventsByDate.flat();
 }
 

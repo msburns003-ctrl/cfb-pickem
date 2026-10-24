@@ -5,7 +5,7 @@
 
 import { storage } from "./storage";
 import { computePickType } from "./scoring";
-import { dateStrFromDate, fetchEspnScoreboardByDate, findMatchingEvent, type EspnCompetitor, type EspnEvent } from "./scores";
+import { dateStrFromDate, fetchEspnScoreboardByDate, findMatchingEvent, FBS_GROUP, type EspnCompetitor, type EspnEvent } from "./scores";
 import type { Game, InsertGame, Week } from "@shared/schema";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -13,7 +13,6 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 // (Tuesday, for a Saturday deadline) to 3 days after (the following Tuesday).
 const WINDOW_BEFORE_MS = 4 * DAY_MS;
 const WINDOW_AFTER_MS = 3 * DAY_MS;
-const FBS_GROUP = "80";
 
 export interface Candidate {
   sourceFixtureId: string;
