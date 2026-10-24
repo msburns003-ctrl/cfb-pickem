@@ -10,6 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
+import { useNow } from "@/hooks/use-now";
 import { formatEastern } from "@/lib/time";
 import { Sparkles, ArrowRight, Save } from "lucide-react";
 import type { Game, Pick, UpsetPick, Week } from "@shared/schema";
@@ -41,6 +42,13 @@ export default function DashboardPage() {
     queryKey: [`/api/weeks/${activeWeekId}/dashboard`],
     enabled: !!activeWeekId,
   });
+
+  // The server only reports week-level `locked` as of when the dashboard was
+  // fetched, and each game also locks at its own kickoff. Re-check both on a
+  // timer so a member can't stage a pick the server will reject.
+  const now = useNow();
+  const weekLocked = !!data && (data.locked || now >= new Date(data.week.pickDeadline).getTime());
+  const hasKickedOff = (game: Game) => now >= new Date(game.kickoff).getTime();
 
   // Selecting a team only updates this local map — nothing hits the network
   // until the member presses "Save picks". Keyed by gameId so switching back
@@ -297,12 +305,18 @@ export default function DashboardPage() {
     return map;
   }, [data]);
 
+  // A game that has kicked off can't be saved any more, so a selection
+  // staged on it no longer counts as unsaved; its saved pick (if any) stands.
   const unsavedGameIds = useMemo(
     () =>
       Array.from(localPicks.entries())
         .filter(([gameId, team]) => picksByGame.get(gameId)?.selectedTeam !== team)
+        .filter(([gameId]) => {
+          const game = data?.games.find((g) => g.id === gameId);
+          return !!game && now < new Date(game.kickoff).getTime();
+        })
         .map(([gameId]) => gameId),
-    [localPicks, picksByGame],
+    [localPicks, picksByGame, data, now],
   );
   const unsavedCount = unsavedGameIds.length;
 
@@ -369,7 +383,7 @@ export default function DashboardPage() {
           )}
         </div>
         <div className="flex items-center gap-3">
-          {data && !data.locked && (
+          {data && !weekLocked && (
             <div className="text-sm">
               Locks in <CountdownTimer deadline={data.week.pickDeadline} />
               <span className="ml-1 text-xs text-muted-foreground">
@@ -402,14 +416,16 @@ export default function DashboardPage() {
         </div>
       ) : (
         <>
-          {data.locked && data.week.status === "open" && (
+          {weekLocked && data.week.status === "open" && (
             <p className="rounded-md bg-muted px-3 py-2 text-sm text-muted-foreground">
               Picks are locked for this week. Check back once results are graded.
             </p>
           )}
           <div className="flex flex-col gap-3">
             {data.games.map((game) => {
-              const selectedTeam = localPicks.get(game.id) ?? picksByGame.get(game.id)?.selectedTeam ?? null;
+              const kickedOff = hasKickedOff(game);
+              const savedTeam = picksByGame.get(game.id)?.selectedTeam ?? null;
+              const selectedTeam = kickedOff ? savedTeam : localPicks.get(game.id) ?? savedTeam;
               return (
                 <GameCard
                   key={game.id}
@@ -417,7 +433,8 @@ export default function DashboardPage() {
                   pick={picksByGame.get(game.id)}
                   selectedTeam={selectedTeam}
                   unsaved={unsavedGameIds.includes(game.id)}
-                  locked={data.locked}
+                  locked={weekLocked || kickedOff}
+                  kickedOff={kickedOff && !weekLocked}
                   onSelect={(team) => setLocalPicks((prev) => new Map(prev).set(game.id, team))}
                 />
               );
@@ -446,7 +463,8 @@ export default function DashboardPage() {
           <UpsetPickPanel
             availableGames={data.availableForUpset}
             myUpsetPick={data.myUpsetPick}
-            locked={data.locked}
+            locked={weekLocked}
+            now={now}
             submitting={upsetMutation.isPending}
             onSubmit={(gameId) => upsetMutation.mutate(gameId)}
           />

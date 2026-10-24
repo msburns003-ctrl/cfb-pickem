@@ -228,6 +228,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       return res.status(403).json({ message: "The bonus pick is locked for this game or week" });
     }
 
+    // Changing an existing pick is only allowed while its game hasn't started,
+    // otherwise a member could swap away from an underdog that's losing.
+    const existing = await storage.getUpsetPick(weekId, req.user!.id);
+    if (existing && existing.gameId !== game.id) {
+      const existingGame = await storage.getGame(existing.gameId);
+      if (existingGame && now >= new Date(existingGame.kickoff).getTime()) {
+        return res.status(403).json({ message: "Your bonus pick's game has already kicked off, so it can't be changed" });
+      }
+    }
+
     const underdogTeam = game.favoriteTeam === game.awayTeam ? game.homeTeam : game.awayTeam;
 
     const upsetPick = await storage.upsertUpsetPick({

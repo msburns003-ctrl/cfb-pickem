@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -21,15 +21,30 @@ interface UpsetPickPanelProps {
   availableGames: Game[];
   myUpsetPick: UpsetPick | null;
   locked: boolean;
+  now: number;
   onSubmit: (gameId: number) => void;
   submitting?: boolean;
 }
 
-export function UpsetPickPanel({ availableGames, myUpsetPick, locked, onSubmit, submitting }: UpsetPickPanelProps) {
+export function UpsetPickPanel({ availableGames, myUpsetPick, locked, now, onSubmit, submitting }: UpsetPickPanelProps) {
   const [selectedGameId, setSelectedGameId] = useState<string>("");
+  const [editing, setEditing] = useState(false);
 
-  if (myUpsetPick) {
-    const game = availableGames.find((g) => g.id === myUpsetPick.gameId);
+  // A new submission (optimistic or real) closes the change form.
+  useEffect(() => {
+    setEditing(false);
+    setSelectedGameId("");
+  }, [myUpsetPick?.submittedAt]);
+
+  const notStarted = (g: Game) => now < new Date(g.kickoff).getTime();
+  // Only games that haven't kicked off can be chosen; the server rejects the rest.
+  const openGames = availableGames.filter(notStarted);
+  const pickedGame = myUpsetPick ? availableGames.find((g) => g.id === myUpsetPick.gameId) : undefined;
+  // The current pick can be swapped until the week locks or its game kicks off.
+  const canChange = !locked && !!myUpsetPick && myUpsetPick.result === "pending" && !!pickedGame && notStarted(pickedGame);
+
+  if (myUpsetPick && (!editing || !canChange)) {
+    const game = pickedGame;
     const graded = myUpsetPick.result !== "pending";
     return (
       <div className="rounded-lg border border-card-border bg-card p-4" data-testid="card-upset-pick-submitted">
@@ -73,6 +88,17 @@ export function UpsetPickPanel({ availableGames, myUpsetPick, locked, onSubmit, 
             Final: {game.awayTeam} {game.awayScore} – {game.homeTeam} {game.homeScore}
           </p>
         )}
+        {canChange && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="mt-3"
+            onClick={() => setEditing(true)}
+            data-testid="button-change-upset-pick"
+          >
+            Change pick
+          </Button>
+        )}
       </div>
     );
   }
@@ -86,8 +112,10 @@ export function UpsetPickPanel({ availableGames, myUpsetPick, locked, onSubmit, 
         Pick one underdog from any game not already on this week&apos;s slate. Score 1–3 points if they win outright,
         based on how big the spread is.
       </p>
-      {availableGames.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No other games available this week.</p>
+      {openGames.length === 0 ? (
+        <p className="text-sm text-muted-foreground">
+          {availableGames.length === 0 ? "No other games available this week." : "All other games this week have kicked off."}
+        </p>
       ) : (
         <div className="flex flex-col gap-2 sm:flex-row">
           <Select value={selectedGameId} onValueChange={setSelectedGameId} disabled={locked}>
@@ -95,7 +123,7 @@ export function UpsetPickPanel({ availableGames, myUpsetPick, locked, onSubmit, 
               <SelectValue placeholder="Choose a game and underdog..." />
             </SelectTrigger>
             <SelectContent>
-              {availableGames.map((g) => {
+              {openGames.map((g) => {
                 const underdogIsAway = g.favoriteTeam !== g.awayTeam;
                 const underdog = underdogIsAway ? g.awayTeam : g.homeTeam;
                 const underdogRank = underdogIsAway ? g.awayRank : g.homeRank;
@@ -116,6 +144,11 @@ export function UpsetPickPanel({ availableGames, myUpsetPick, locked, onSubmit, 
           >
             Lock In
           </Button>
+          {myUpsetPick && (
+            <Button variant="ghost" onClick={() => setEditing(false)} data-testid="button-cancel-upset-change">
+              Cancel
+            </Button>
+          )}
         </div>
       )}
     </div>

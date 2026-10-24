@@ -19,10 +19,12 @@ interface GameCardProps {
   selectedTeam?: string | null;
   unsaved?: boolean;
   locked: boolean;
+  // True when this game has started but the rest of the week is still open.
+  kickedOff?: boolean;
   onSelect?: (selectedTeam: string) => void;
 }
 
-export function GameCard({ game, pick, selectedTeam, unsaved, locked, onSelect }: GameCardProps) {
+export function GameCard({ game, pick, selectedTeam, unsaved, locked, kickedOff, onSelect }: GameCardProps) {
   const isFavoriteAway = game.favoriteTeam === game.awayTeam;
   // Always show the spread as reference info, even for straight-up games —
   // it just isn't the basis for grading unless pickType is "ATS".
@@ -34,7 +36,14 @@ export function GameCard({ game, pick, selectedTeam, unsaved, locked, onSelect }
   return (
     <div className="rounded-lg border border-card-border bg-card p-4" data-testid={`card-game-${game.id}`}>
       <div className="mb-3 flex items-center justify-between gap-2 text-xs text-muted-foreground">
-        <span>{formatKickoff(game.kickoff)}</span>
+        <span>
+          {formatKickoff(game.kickoff)}
+          {kickedOff && !graded && (
+            <span className="ml-1.5 font-medium" data-testid={`text-kicked-off-${game.id}`}>
+              · Kicked off, locked
+            </span>
+          )}
+        </span>
         <div className="flex items-center gap-2">
           {game.broadcast && (
             <span className="flex items-center gap-1">
@@ -97,6 +106,9 @@ export function GameCard({ game, pick, selectedTeam, unsaved, locked, onSelect }
         </div>
       )}
 
+      {!graded && kickedOff && !selectedTeam && (
+        <p className="mt-3 text-xs text-muted-foreground">No pick made before kickoff.</p>
+      )}
       {!graded && selectedTeam && (
         <p className={cn("mt-3 text-xs", unsaved ? "font-medium text-accent" : "text-muted-foreground")}>
           {unsaved ? `${selectedTeam} selected \u2014 not saved yet` : `You picked ${selectedTeam}.`}
