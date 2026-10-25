@@ -14,6 +14,8 @@ import { useLiveScores } from "@/hooks/use-live-scores";
 import { setUnsavedChanges } from "@/lib/app-refresh";
 import { tallyWeek } from "@/lib/projection";
 import { WeekSummary, type SeasonStanding } from "@/components/WeekSummary";
+import { WeekRecap } from "@/components/WeekRecap";
+import { useConsensus, useTeamInfo } from "@/hooks/use-team-info";
 import { InstallAppBanner } from "@/components/InstallAppCard";
 
 // Home-screen app announcement: Sunday, Oct 25, 2026, 6 PM ET.
@@ -45,7 +47,10 @@ export default function DashboardPage() {
   const [selectedWeekId, setSelectedWeekId] = useState<number | null>(null);
 
   const weeks = weeksData?.weeks ?? [];
-  const activeWeekId = selectedWeekId ?? weeks.find((w) => w.status === "open")?.id ?? weeks[0]?.id ?? null;
+  // Default to the open week, else the latest week members can see (a new
+  // week sits hidden in Setup until the admin opens it).
+  const latestVisibleWeek = weeks.find((w) => w.status !== "setup") ?? null;
+  const activeWeekId = selectedWeekId ?? weeks.find((w) => w.status === "open")?.id ?? latestVisibleWeek?.id ?? weeks[0]?.id ?? null;
 
   const { data, isLoading } = useQuery<DashboardResponse>({
     queryKey: [`/api/weeks/${activeWeekId}/dashboard`],
@@ -61,6 +66,8 @@ export default function DashboardPage() {
   const upsetGame = data?.myUpsetPick
     ? [...data.games, ...data.availableForUpset].find((g) => g.id === data.myUpsetPick!.gameId)
     : undefined;
+  const teamInfo = useTeamInfo(activeWeekId);
+  const split = useConsensus(activeWeekId, !!data?.games.some((g) => hasKickedOff(g)));
   const liveScores = useLiveScores(activeWeekId, [...(data?.games ?? []), ...(upsetGame ? [upsetGame] : [])], now);
   const { data: standingsData } = useQuery<{ rows: { userId: number; rank: number; totalPoints: number }[] }>({
     queryKey: ["/api/standings"],
@@ -365,6 +372,8 @@ export default function DashboardPage() {
   const showSummary =
     !!tally &&
     (tally.wins + tally.losses + tally.liveWinning + tally.liveLosing + tally.liveEven > 0 || tally.upsetLive !== null || tally.officialPoints > 0);
+  // Recap the latest week once it's final, until the next week opens.
+  const showRecap = data?.week.status === "graded" && data.week.id === latestVisibleWeek?.id;
   const myStanding = standingsData?.rows.find((r) => r.userId === user?.id);
   const season: SeasonStanding | null = myStanding
     ? {
@@ -448,7 +457,8 @@ export default function DashboardPage() {
         </div>
       ) : (
         <>
-          {showSummary && tally && <WeekSummary tally={tally} upsetPick={data.myUpsetPick} season={season} />}
+          {showRecap && <WeekRecap week={data.week} userId={user?.id} myPicks={data.myPicks} myUpsetPick={data.myUpsetPick} />}
+          {showSummary && !showRecap && tally && <WeekSummary tally={tally} upsetPick={data.myUpsetPick} season={season} />}
           {weekLocked && data.week.status === "open" && (
             <p className="rounded-md bg-muted px-3 py-2 text-sm text-muted-foreground">
               Picks are locked for this week. Check back once results are graded.
@@ -469,6 +479,8 @@ export default function DashboardPage() {
                   locked={weekLocked || kickedOff}
                   kickedOff={kickedOff && !weekLocked}
                   live={liveScores[game.id]}
+                  teamInfo={teamInfo}
+                  split={split[game.id]}
                   onSelect={(team) => setLocalPicks((prev) => new Map(prev).set(game.id, team))}
                 />
               );

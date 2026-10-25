@@ -340,3 +340,16 @@ export interface SeasonStatsResponse {
   weeks: { id: number; label: string; weekNumber: number; leagueAverage: number }[];
   members: MemberSeasonStats[];
 }
+
+// ---------- Team logos (from ESPN, in memory only) ----------
+export interface TeamInfo {
+  logo: string | null;
+  logoDark: string | null;
+  abbreviation: string | null;
+}
+
+// ---------- League split on games that have kicked off ----------
+export interface ConsensusResponse {
+  // keyed by game id; only games that have kicked off
+  games: Record<number, { awayCount: number; homeCount: number; totalPicks: number }>;
+}

@@ -19,6 +19,7 @@ import { insertWeekSchema, type InsertWeek, insertCristoBallEntrySchema, insertC
 import { checkGamesForWeek, getLiveScoresForWeek } from "./scores";
 import { autoGradeEnabled, getAutoGradeStatus } from "./auto-grade";
 import { importEspnGamesForWeek } from "./schedule";
+import { getTeamInfo } from "./teams";
 import { z } from "zod";
 import { cached, invalidate, keys, prefixes, cacheStats } from "./cache";
 
@@ -436,6 +437,42 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch {
       res.status(502).json({ message: "Live scores are unavailable right now" });
     }
+  });
+
+  // ---------------- TEAM LOGOS ----------------
+  // Logo and abbreviation for every team in the week, from ESPN's teams list
+  // (kept in memory). Cached 10 minutes per week.
+  app.get("/api/weeks/:id/teams", requireAuth, async (req, res) => {
+    const weekId = Number(req.params.id);
+    if (!Number.isInteger(weekId) || weekId <= 0) return res.status(400).json({ message: "Invalid week" });
+    const payload = await cached(keys.teams(weekId), 10 * 60_000, async () => {
+      const games = await storage.listGamesByWeek(weekId);
+      return { teams: await getTeamInfo(games.flatMap((g) => [g.awayTeam, g.homeTeam])) };
+    });
+    res.json(payload);
+  });
+
+  // ---------------- LEAGUE SPLIT ----------------
+  // How the league picked each game, but only for games that have kicked
+  // off: picks on those can no longer change, so showing the split can't
+  // influence anyone. Cached 30s per week.
+  app.get("/api/weeks/:id/consensus", requireAuth, async (req, res) => {
+    const weekId = Number(req.params.id);
+    if (!Number.isInteger(weekId) || weekId <= 0) return res.status(400).json({ message: "Invalid week" });
+    const payload = await cached(keys.consensus(weekId), 30_000, async () => {
+      const now = Date.now();
+      const started = (await storage.listGamesByWeek(weekId)).filter((g) => g.isSelected && new Date(g.kickoff).getTime() <= now);
+      const picks = started.length > 0 ? await storage.listPicksByWeek(weekId) : [];
+      const games: Record<number, { awayCount: number; homeCount: number; totalPicks: number }> = {};
+      for (const g of started) {
+        const gamePicks = picks.filter((p) => p.gameId === g.id);
+        const awayCount = gamePicks.filter((p) => p.selectedTeam === g.awayTeam).length;
+        const homeCount = gamePicks.filter((p) => p.selectedTeam === g.homeTeam).length;
+        games[g.id] = { awayCount, homeCount, totalPicks: awayCount + homeCount };
+      }
+      return { games };
+    });
+    res.json(payload);
   });
 
   // ---------------- PICKS GRID ----------------

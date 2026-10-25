@@ -2,8 +2,9 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { formatEastern } from "@/lib/time";
-import { Tv, Check, X, Coins } from "lucide-react";
-import type { Game, LiveScore, Pick } from "@shared/schema";
+import { Tv, Check, X, Coins, Users } from "lucide-react";
+import type { Game, LiveScore, Pick, TeamInfo } from "@shared/schema";
+import { TeamLogo } from "@/components/TeamLogo";
 import { livePickStatus, type LivePickStatus } from "@shared/outcome";
 
 function teamLabel(team: string, rank: number | null) {
@@ -14,6 +15,22 @@ const LIVE_STATUS_TEXT: Record<"SU" | "ATS", Record<LivePickStatus, string>> = {
   SU: { winning: "winning", losing: "losing", even: "tied" },
   ATS: { winning: "covering", losing: "not covering", even: "right on the spread" },
 };
+
+type Split = { awayCount: number; homeCount: number; totalPicks: number };
+
+// "How you compare" for a game that has kicked off.
+function splitText(game: Game, split: Split, pickedTeam: string | null | undefined): string {
+  const pct = (n: number) => Math.round((n / split.totalPicks) * 100);
+  if (!pickedTeam) {
+    return `League split: ${pct(split.awayCount)}% ${game.awayTeam} · ${pct(split.homeCount)}% ${game.homeTeam}`;
+  }
+  const same = pickedTeam === game.awayTeam ? split.awayCount : split.homeCount;
+  const others = Math.max(0, same - 1);
+  if (others === 0) return `You're the only one who took ${pickedTeam}`;
+  if (pct(same) >= 50) return `You're with ${pct(same)}% of the league (${same} of ${split.totalPicks})`;
+  if (pct(same) < 30) return `Only ${others} other${others === 1 ? "" : "s"} took ${pickedTeam}`;
+  return `${pct(same)}% of the league took ${pickedTeam} with you`;
+}
 
 function formatKickoff(iso: string) {
   return formatEastern(iso, { weekday: "short", hour: "numeric", minute: "2-digit" });
@@ -29,10 +46,14 @@ interface GameCardProps {
   kickedOff?: boolean;
   // Unofficial ESPN score while the game is in progress or awaiting grading.
   live?: LiveScore;
+  // Logos and abbreviations keyed by team name (may be empty).
+  teamInfo?: Record<string, TeamInfo>;
+  // How the league picked this game; only provided once it has kicked off.
+  split?: Split;
   onSelect?: (selectedTeam: string) => void;
 }
 
-export function GameCard({ game, pick, selectedTeam, unsaved, locked, kickedOff, live, onSelect }: GameCardProps) {
+export function GameCard({ game, pick, selectedTeam, unsaved, locked, kickedOff, live, teamInfo, split, onSelect }: GameCardProps) {
   const isFavoriteAway = game.favoriteTeam === game.awayTeam;
   // Always show the spread as reference info, even for straight-up games —
   // it just isn't the basis for grading unless pickType is "ATS".
@@ -90,6 +111,7 @@ export function GameCard({ game, pick, selectedTeam, unsaved, locked, kickedOff,
               type="button"
               variant={selected ? "default" : "outline"}
               disabled={locked}
+              aria-pressed={selected}
               onClick={() => onSelect?.(team)}
               className={cn(
                 "h-auto flex-col items-center gap-0.5 py-3 whitespace-normal text-center",
@@ -98,6 +120,7 @@ export function GameCard({ game, pick, selectedTeam, unsaved, locked, kickedOff,
               )}
               data-testid={`button-pick-${game.id}-${team.replace(/\s/g, "-")}`}
             >
+              <TeamLogo info={teamInfo?.[team]} size={28} backdrop={selected} className="mb-1" />
               <span className="text-sm font-semibold leading-tight">{teamLabel(team, rank)}</span>
               <span className="text-xs opacity-80">{line}</span>
             </Button>
@@ -161,6 +184,12 @@ export function GameCard({ game, pick, selectedTeam, unsaved, locked, kickedOff,
       {!graded && selectedTeam && !pickStatus && (
         <p className={cn("mt-3 text-xs", unsaved ? "font-medium text-accent" : "text-muted-foreground")}>
           {unsaved ? `${selectedTeam} selected \u2014 not saved yet` : `You picked ${selectedTeam}.`}
+        </p>
+      )}
+      {split && split.totalPicks > 0 && (
+        <p className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground" data-testid={`text-split-${game.id}`}>
+          <Users className="h-3.5 w-3.5 shrink-0" aria-hidden />
+          {splitText(game, split, pick?.selectedTeam)}
         </p>
       )}
     </div>

@@ -5,9 +5,10 @@ import { cn } from "@/lib/utils";
 import { formatEastern } from "@/lib/time";
 import { livePickStatus, type LivePickStatus } from "@shared/outcome";
 import { Check, Coins, TrendingUp, Trophy, X } from "lucide-react";
-import type { Game, LiveScore } from "@shared/schema";
+import type { Game, LiveScore, TeamInfo } from "@shared/schema";
 import type { GridResponse, GridRow } from "@/lib/grid-pdf";
 import { scoreFor, type WeekTally } from "@/lib/projection";
+import { TeamLogo } from "@/components/TeamLogo";
 
 function teamLabel(team: string, rank: number | null) {
   return rank ? `#${rank} ${team}` : team;
@@ -110,7 +111,19 @@ function WeekLeaderboard({
   );
 }
 
-function GameBlock({ game, data, score, currentUserId }: { game: Game; data: GridResponse; score: LiveScore | undefined; currentUserId: number | undefined }) {
+function GameBlock({
+  game,
+  data,
+  score,
+  currentUserId,
+  teamInfo,
+}: {
+  game: Game;
+  data: GridResponse;
+  score: LiveScore | undefined;
+  currentUserId: number | undefined;
+  teamInfo: Record<string, TeamInfo>;
+}) {
   const consensus = data.consensus[game.id];
   const isFavoriteAway = game.favoriteTeam === game.awayTeam;
   const sides = [
@@ -161,7 +174,10 @@ function GameBlock({ game, data, score, currentUserId }: { game: Game; data: Gri
           const pickers = data.grid.filter((row) => row.picks[game.id]?.selectedTeam === side.team);
           return (
             <div key={side.team} className="min-w-0">
-              <div className="mb-1.5 text-sm font-semibold leading-tight">{teamLabel(side.team, side.rank)}</div>
+              <div className="mb-1.5 flex items-center gap-1.5 text-sm font-semibold leading-tight">
+                <TeamLogo info={teamInfo[side.team]} size={20} />
+                {teamLabel(side.team, side.rank)}
+              </div>
               <div className="mb-1.5 text-xs text-muted-foreground">
                 {side.line} · {pickers.length} pick{pickers.length === 1 ? "" : "s"}
                 {consensus && consensus.totalPicks > 0 && ` (${side.pct}%)`}
@@ -249,11 +265,13 @@ export function GridByGame({
   liveScores,
   currentUserId,
   projected,
+  teamInfo,
 }: {
   data: GridResponse;
   liveScores: Record<number, LiveScore>;
   currentUserId: number | undefined;
   projected: Map<number, WeekTally> | null;
+  teamInfo: Record<string, TeamInfo>;
 }) {
   const hasUnofficial = data.games.some((g) => {
     const score = scoreFor(g, liveScores);
@@ -264,7 +282,14 @@ export function GridByGame({
     <div className="flex flex-col gap-3" data-testid="grid-by-game">
       <WeekLeaderboard rows={data.grid} currentUserId={currentUserId} projected={projected} />
       {data.games.map((game) => (
-        <GameBlock key={game.id} game={game} data={data} score={scoreFor(game, liveScores)} currentUserId={currentUserId} />
+        <GameBlock
+          key={game.id}
+          game={game}
+          data={data}
+          score={scoreFor(game, liveScores)}
+          currentUserId={currentUserId}
+          teamInfo={teamInfo}
+        />
       ))}
       <UpsetBlock data={data} liveScores={liveScores} currentUserId={currentUserId} />
       {hasUnofficial && (
