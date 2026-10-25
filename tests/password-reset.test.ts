@@ -19,6 +19,7 @@ process.env.APP_URL = "https://cfb-pickem.example.com";
 const { registerRoutes } = await import("../server/routes");
 const { hashPassword } = await import("../server/auth");
 const { createResetToken, verifyResetToken, resetRateLimits } = await import("../server/password-reset");
+const { resetAllLimits } = await import("../server/rate-limit");
 
 let server: Server;
 let base = "";
@@ -34,8 +35,9 @@ afterAll(() => server.close());
 beforeEach(() => {
   resetDb();
   resetRateLimits();
+  resetAllLimits();
   sent.length = 0;
-  user({ id: 1, name: "Matt", email: "matt@example.com", passwordHash: hashPassword("oldpass"), authToken: "existing-session" });
+  user({ id: 1, name: "Matt", email: "matt@example.com", passwordHash: hashPassword("oldpass"), authToken: "e".repeat(64) });
 });
 
 const post = (path: string, body: object) => fetch(base + path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
@@ -95,7 +97,7 @@ describe("forgot / reset password API", () => {
     const cookie = (res.headers.get("set-cookie") ?? "").split(";")[0];
     expect(cookie.startsWith("__Host-")).toBe(true);
     expect((await fetch(`${base}/api/auth/me`, { headers: { cookie } })).status).toBe(200);
-    expect((await fetch(`${base}/api/auth/me`, { headers: { cookie: "__Host-cfb_pickem_session=existing-session" } })).status).toBe(401);
+    expect((await fetch(`${base}/api/auth/me`, { headers: { cookie: `__Host-cfb_pickem_session=${"e".repeat(64)}` } })).status).toBe(401);
 
     // The same link can't be used twice, and the new password works.
     expect((await post("/api/auth/reset-password", { token, newPassword: "another1" })).status).toBe(400);

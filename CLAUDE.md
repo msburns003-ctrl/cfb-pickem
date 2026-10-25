@@ -57,6 +57,7 @@ server/
   routes.ts             all /api routes (public + /api/admin/*)
   auth.ts               password hashing (scrypt), session cookie, temp passwords
   password-reset.ts     signed, single-use "forgot password" links (no DB table)
+  rate-limit.ts         login lockout per account; per-member request limits (in memory)
   mailer.ts             outgoing email over SMTP
   scoring.ts            grading, ATS logic, upset points, standings
   scores.ts             fetches live and final scores from the ESPN public scoreboard
@@ -95,6 +96,7 @@ Security rules:
 - **Cookie names must use the `__Host-` prefix** (`Secure`, `Path=/`, no `Domain`). The pplx.app proxy drops any other cookie name.
 - **Never commit secrets**: no passwords, API keys, Supabase keys, or member credential files. `.env`, `*.db` files, and `league_members_temp_passwords.csv` are git-ignored; keep it that way.
 - Passwords are hashed with scrypt in `salt:hash` format (`server/auth.ts`). Never log or return password hashes or session tokens.
+- Rate limits are keyed by account, never by IP (`server/rate-limit.ts`): the host's proxy hides client IPs and members often share a network. Login is locked per account after 5 failures in 15 minutes; authenticated requests are capped per member inside `requireAuth`.
 - Every `/api/admin/*` route must require an admin session. Validate request bodies with Zod.
 - The frontend calls the API through `API_BASE` in `client/src/lib/queryClient.ts`. Keep the `"__PORT_5000__"` placeholder exactly as is; the deploy step rewrites it. Don't hard-code hostnames.
 

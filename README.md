@@ -103,6 +103,7 @@ Pushing to GitHub does **not** update the live site. The site is published from 
 - Sessions live in an httpOnly `__Host-` cookie. No browser storage is used (`localStorage`, `sessionStorage`, `indexedDB`); the theme choice is a separate `__Host-theme` cookie. No service worker.
 - Passwords are hashed with scrypt.
 - All `/api/admin/*` routes require an admin session.
+- Login locks an account for 15 minutes after 5 failed attempts; each member's requests are capped well above normal use. Limits are per account, so members sharing Wi-Fi never share a limit.
 - Never commit secrets. `.env` and member credential files are git-ignored.
 
 See [`CLAUDE.md`](CLAUDE.md) for the full contributor guide.
