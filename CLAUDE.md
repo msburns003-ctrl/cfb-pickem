@@ -19,6 +19,7 @@ npm install
 cp .env.example .env   # then fill in SUPABASE_URL and SUPABASE_ANON_KEY
 npm run dev            # Express + Vite dev server on http://localhost:5000
 npm run check          # TypeScript type check (must pass before committing)
+npm test               # Vitest tests (must pass before committing; CI runs them on every PR)
 npm run build          # production build into dist/
 ```
 
@@ -29,6 +30,9 @@ Environment variables (`.env`, never committed):
 | `SUPABASE_URL` | Supabase project URL |
 | `SUPABASE_ANON_KEY` | Supabase anon key used by the server |
 | `PORT` | Optional, defaults to 5000 |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `MAIL_FROM` | Optional. Outgoing email for "forgot password" (e.g. Gmail with an app password). |
+| `APP_URL` | Optional. The site's public `https://` address, used in reset links. |
+| `RESET_TOKEN_SECRET` | Optional. 32+ random characters that sign reset links. "Forgot password" stays off unless this, `APP_URL` and the SMTP settings are all set. |
 | `AUTO_GRADE` | Optional. Automatic scoring is on in production and off in local dev; set `on` or `off` to override. Leave it off locally unless you mean to write to the production database. |
 
 Note: the session cookie uses the `__Host-` prefix and is always `Secure`, so a browser over plain `http://localhost` will not store it. Test logged-in flows against the deployed HTTPS site, or with `curl` using a cookie jar.
@@ -52,6 +56,8 @@ server/
   index.ts              Express entry
   routes.ts             all /api routes (public + /api/admin/*)
   auth.ts               password hashing (scrypt), session cookie, temp passwords
+  password-reset.ts     signed, single-use "forgot password" links (no DB table)
+  mailer.ts             outgoing email over SMTP
   scoring.ts            grading, ATS logic, upset points, standings
   scores.ts             fetches live and final scores from the ESPN public scoreboard
   auto-grade.ts         background job: saves final scores, grades, and sets up the next week
@@ -65,6 +71,8 @@ script/seed.ts          one-time admin seed (generates a random temp password)
 supabase_migration.sql  database schema
 add_members.py          bulk member add (prompts for admin credentials)
 security_review_*.md    past security reviews
+tests/                  Vitest tests (in-memory stand-in for Supabase in tests/fake-storage.ts)
+.github/workflows/ci.yml type check, tests and build on every pull request
 ```
 
 Main tables: `users`, `weeks`, `games`, `picks`, `upset_picks`, plus the Cristo-Ball tables. See `supabase_migration.sql`.
@@ -105,6 +113,7 @@ To keep the two copies in sync, always push your Claude Code work to GitHub befo
 ## Coding conventions
 
 - TypeScript everywhere; `npm run check` must pass with zero errors.
+- `npm test` must pass. Add or update tests when changing league rules, scoring, grading, imports or auth; tests never touch Supabase or ESPN.
 - Keep all database access inside `server/storage.ts`; routes call storage methods.
 - Reuse existing shadcn/ui components in `client/src/components/ui/` rather than adding new UI libraries.
 - Times are stored in UTC and displayed in Eastern Time.
