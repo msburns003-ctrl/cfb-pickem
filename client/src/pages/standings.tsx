@@ -56,6 +56,8 @@ function RankChangeIndicator({ rank, previousRank }: { rank: number; previousRan
 interface StandingsResponse {
   rows: StandingsRow[];
   weeks: Week[];
+  // Picks locked but not fully graded yet; its points so far are in totals.
+  currentWeek: Week | null;
 }
 
 function rankBadgeClass(rank: number) {
@@ -64,6 +66,16 @@ function rankBadgeClass(rank: number) {
   if (rank === 3) return "bg-secondary text-secondary-foreground";
   return "bg-transparent";
 }
+
+// Rank, Δ and Member stay pinned on the left and Total on the right while the
+// week columns scroll between them. Pinned cells need a solid background;
+// your own row gets the same tint as the rest of it, mixed solid.
+const STICKY_RANK = "sticky left-0 z-10 w-14 min-w-14";
+const STICKY_DELTA = "sticky left-14 z-10 w-10 min-w-10";
+// Dividers are drawn as 1px shadows: borders don't render reliably on sticky table cells.
+const STICKY_MEMBER = "sticky left-24 z-10 shadow-[1px_0_0_0_hsl(var(--card-border))]";
+const STICKY_TOTAL = "sticky right-0 z-10 shadow-[-1px_0_0_0_hsl(var(--card-border))]";
+const YOU_SOLID_BG = "bg-[color-mix(in_srgb,hsl(var(--primary))_5%,hsl(var(--background)))]";
 
 export default function StandingsPage() {
   const { user } = useAuth();
@@ -105,20 +117,34 @@ export default function StandingsPage() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-card-border bg-muted/50 text-left text-xs uppercase tracking-wide text-muted-foreground">
-              <th className="px-3 py-2 font-medium">Rank</th>
-              <th className="px-3 py-2 font-medium" title="Change since last graded week">Δ</th>
-              <th className="px-3 py-2 font-medium">Member</th>
+              <th className={cn(STICKY_RANK, "bg-muted px-3 py-2 font-medium")}>Rank</th>
+              <th className={cn(STICKY_DELTA, "bg-muted px-3 py-2 font-medium")} title="Change since last graded week">
+                Δ
+              </th>
+              <th className={cn(STICKY_MEMBER, "bg-muted px-3 py-2 font-medium")}>Member</th>
               {data.weeks.map((w) => (
                 <th key={w.id} className="px-3 py-2 text-center font-medium whitespace-nowrap">
                   {w.label}
                 </th>
               ))}
+              {data.currentWeek && (
+                <th
+                  className="bg-accent/10 px-3 py-2 text-center font-medium whitespace-nowrap"
+                  title="Points so far this week; updates as games are graded"
+                  data-testid="th-current-week"
+                >
+                  {data.currentWeek.label}
+                  <div className="text-[10px] font-normal normal-case text-accent">in progress</div>
+                </th>
+              )}
               <th className="px-3 py-2 text-center font-medium whitespace-nowrap">Cristo-Ball</th>
-              <th className="px-3 py-2 text-right font-medium">Total</th>
+              <th className={cn(STICKY_TOTAL, "bg-muted px-3 py-2 text-right font-medium")}>Total</th>
             </tr>
           </thead>
           <tbody>
-            {data.rows.map((row) => (
+            {data.rows.map((row) => {
+              const stickyBg = row.userId === user?.id ? YOU_SOLID_BG : "bg-background";
+              return (
               <tr
                 key={row.userId}
                 className={cn(
@@ -127,15 +153,15 @@ export default function StandingsPage() {
                 )}
                 data-testid={`row-standings-${row.userId}`}
               >
-                <td className="px-3 py-2">
+                <td className={cn(STICKY_RANK, stickyBg, "px-3 py-2")}>
                   <Badge variant="outline" className={cn("min-w-8 justify-center", rankBadgeClass(row.rank))}>
                     {row.rank}
                   </Badge>
                 </td>
-                <td className="px-3 py-2">
+                <td className={cn(STICKY_DELTA, stickyBg, "px-3 py-2")}>
                   <RankChangeIndicator rank={row.rank} previousRank={row.previousRank} />
                 </td>
-                <td className="px-3 py-2 font-medium whitespace-nowrap">
+                <td className={cn(STICKY_MEMBER, stickyBg, "max-w-40 truncate px-3 py-2 font-medium whitespace-nowrap")}>
                   <Link href={`/stats/${row.userId}`} className="hover:underline" data-testid={`link-stats-${row.userId}`}>
                     {row.name}
                   </Link>
@@ -146,15 +172,23 @@ export default function StandingsPage() {
                     {row.weeklyPoints[w.id] ?? "–"}
                   </td>
                 ))}
+                {data.currentWeek && (
+                  <td className="bg-accent/10 px-3 py-2 text-center font-medium" data-testid={`text-current-week-${row.userId}`}>
+                    {row.weeklyPoints[data.currentWeek.id] ?? 0}
+                  </td>
+                )}
                 <td className="px-3 py-2 text-center text-muted-foreground">{row.cristoBallPoints ?? "–"}</td>
-                <td className="px-3 py-2 text-right font-display font-semibold">{row.totalPoints}</td>
+                <td className={cn(STICKY_TOTAL, stickyBg, "px-3 py-2 text-right font-display font-semibold")}>
+                  {row.totalPoints}
+                </td>
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
       </div>
 
-      {data.weeks.length > 0 && (
+      {(data.weeks.length > 0 || data.currentWeek) && (
       <div className="flex flex-col gap-2">
         <h2 className="font-display text-lg font-semibold tracking-tight flex items-center gap-2">
           <DollarSign className="h-4 w-4 text-accent" /> Weekly Winners
@@ -195,6 +229,32 @@ export default function StandingsPage() {
                   </tr>
                 );
               })}
+              {data.currentWeek &&
+                (() => {
+                  const cw = data.currentWeek;
+                  const maxPoints = Math.max(0, ...data.rows.map((r) => r.weeklyPoints[cw.id] ?? 0));
+                  const leaders = data.rows.filter((r) => (r.weeklyPoints[cw.id] ?? 0) === maxPoints);
+                  return (
+                    <tr className="bg-accent/10" data-testid="row-weekly-winner-current">
+                      <td className="px-3 py-2 whitespace-nowrap">
+                        {cw.label}
+                        <span className="ml-1.5 text-xs text-accent">in progress</span>
+                      </td>
+                      <td className="px-3 py-2">
+                        {maxPoints > 0 ? (
+                          <>
+                            <span className="text-xs text-muted-foreground">Leading: </span>
+                            <span className="font-medium">{leaders.map((r) => r.name).join(", ")}</span>
+                          </>
+                        ) : (
+                          <span className="text-muted-foreground">No games graded yet</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2 text-center text-muted-foreground">{maxPoints > 0 ? maxPoints : "—"}</td>
+                      <td className="px-3 py-2 text-right text-muted-foreground">—</td>
+                    </tr>
+                  );
+                })()}
             </tbody>
           </table>
         </div>
