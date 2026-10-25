@@ -56,6 +56,8 @@ function RankChangeIndicator({ rank, previousRank }: { rank: number; previousRan
 interface StandingsResponse {
   rows: StandingsRow[];
   weeks: Week[];
+  // Picks locked but not fully graded yet; its points so far are in totals.
+  currentWeek: Week | null;
 }
 
 function rankBadgeClass(rank: number) {
@@ -113,6 +115,16 @@ export default function StandingsPage() {
                   {w.label}
                 </th>
               ))}
+              {data.currentWeek && (
+                <th
+                  className="bg-accent/10 px-3 py-2 text-center font-medium whitespace-nowrap"
+                  title="Points so far this week; updates as games are graded"
+                  data-testid="th-current-week"
+                >
+                  {data.currentWeek.label}
+                  <div className="text-[10px] font-normal normal-case text-accent">in progress</div>
+                </th>
+              )}
               <th className="px-3 py-2 text-center font-medium whitespace-nowrap">Cristo-Ball</th>
               <th className="px-3 py-2 text-right font-medium">Total</th>
             </tr>
@@ -146,6 +158,11 @@ export default function StandingsPage() {
                     {row.weeklyPoints[w.id] ?? "–"}
                   </td>
                 ))}
+                {data.currentWeek && (
+                  <td className="bg-accent/10 px-3 py-2 text-center font-medium" data-testid={`text-current-week-${row.userId}`}>
+                    {row.weeklyPoints[data.currentWeek.id] ?? 0}
+                  </td>
+                )}
                 <td className="px-3 py-2 text-center text-muted-foreground">{row.cristoBallPoints ?? "–"}</td>
                 <td className="px-3 py-2 text-right font-display font-semibold">{row.totalPoints}</td>
               </tr>
@@ -154,7 +171,7 @@ export default function StandingsPage() {
         </table>
       </div>
 
-      {data.weeks.length > 0 && (
+      {(data.weeks.length > 0 || data.currentWeek) && (
       <div className="flex flex-col gap-2">
         <h2 className="font-display text-lg font-semibold tracking-tight flex items-center gap-2">
           <DollarSign className="h-4 w-4 text-accent" /> Weekly Winners
@@ -195,6 +212,32 @@ export default function StandingsPage() {
                   </tr>
                 );
               })}
+              {data.currentWeek &&
+                (() => {
+                  const cw = data.currentWeek;
+                  const maxPoints = Math.max(0, ...data.rows.map((r) => r.weeklyPoints[cw.id] ?? 0));
+                  const leaders = data.rows.filter((r) => (r.weeklyPoints[cw.id] ?? 0) === maxPoints);
+                  return (
+                    <tr className="bg-accent/10" data-testid="row-weekly-winner-current">
+                      <td className="px-3 py-2 whitespace-nowrap">
+                        {cw.label}
+                        <span className="ml-1.5 text-xs text-accent">in progress</span>
+                      </td>
+                      <td className="px-3 py-2">
+                        {maxPoints > 0 ? (
+                          <>
+                            <span className="text-xs text-muted-foreground">Leading: </span>
+                            <span className="font-medium">{leaders.map((r) => r.name).join(", ")}</span>
+                          </>
+                        ) : (
+                          <span className="text-muted-foreground">No games graded yet</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2 text-center text-muted-foreground">{maxPoints > 0 ? maxPoints : "—"}</td>
+                      <td className="px-3 py-2 text-right text-muted-foreground">—</td>
+                    </tr>
+                  );
+                })()}
             </tbody>
           </table>
         </div>

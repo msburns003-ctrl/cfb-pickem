@@ -293,7 +293,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         rowsWithChange = rows.map((r) => ({ ...r, previousRank: priorRankByUser.get(r.userId) ?? null }));
       }
 
-      return { rows: rowsWithChange, weeks: gradedWeeks };
+      // The week being played: picks locked but not fully graded. Its points
+      // already count in totals as games are graded, so show it too.
+      const now = Date.now();
+      const currentWeek =
+        weeks
+          .filter((w) => w.status === "locked" || (w.status === "open" && now >= new Date(w.pickDeadline).getTime()))
+          .sort((a, b) => b.weekNumber - a.weekNumber)[0] ?? null;
+
+      return { rows: rowsWithChange, weeks: gradedWeeks, currentWeek };
     });
     res.json(payload);
   });
