@@ -18,6 +18,7 @@ The 2026 college football pick'em league app. Members log in, pick each week's s
 - **Season stats:** pick records, weekly wins, streaks and a points-by-week chart for every member, plus league leaders.
 - **Phone-friendly:** a bottom tab bar on phones, and the site can be added to the home screen as an app (Profile → Get the app).
 - **Dark mode:** Match device, Light or Dark from the sun/moon button in the header.
+- **Forgot password:** members can reset their own password from an emailed link (needs email settings; see below). Otherwise the commissioner resets it.
 - **Admin tools:** manage weeks and the game slate, import games and lines from ESPN, enter or correct scores, manage members and reset passwords.
 
 ## League rules
@@ -61,10 +62,15 @@ npm run dev            # http://localhost:5000
 |---|---|
 | `npm run dev` | Express + Vite dev server |
 | `npm run check` | TypeScript type check (must pass before committing) |
+| `npm test` | Automated tests (must pass; also run on every pull request) |
 | `npm run build` | Production build into `dist/` |
 | `npm start` | Run the production build |
 
 Optional: `AUTO_GRADE=on|off` in `.env`. Automatic scoring and next-week setup run in production and are off in local dev by default; leave them off locally unless you mean to write to the production database.
+
+### Turning on "forgot password"
+
+Set these on the host (see `.env.example`): `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `MAIL_FROM`, `APP_URL` and `RESET_TOKEN_SECRET`. With Gmail: turn on 2-step verification, create an app password (Google Account → Security → App passwords), and use `smtp.gmail.com`, port `587`, your Gmail address and the app password. Until all are set, the login page tells members to ask the commissioner.
 
 > **Heads up:** local dev uses the real production database. Be careful with anything that writes data (grading, imports, seeding, deleting).
 >

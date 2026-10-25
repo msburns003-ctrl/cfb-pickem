@@ -23,6 +23,7 @@ import AdminMembersPage from "@/pages/admin/members";
 import AdminWeekDetailPage from "@/pages/admin/week-detail";
 import CristoBallPage from "@/pages/cristoball";
 import StatsPage from "@/pages/stats";
+import { ForgotPasswordPage, ResetPasswordPage } from "@/pages/password-reset";
 import AdminCristoBallPage from "@/pages/admin/cristoball";
 
 function FullScreenLoader() {
@@ -52,6 +53,8 @@ function AppRouter() {
   return (
     <Switch>
       <Route path="/login" component={LoginRoute} />
+      <Route path="/forgot-password" component={ForgotPasswordPage} />
+      <Route path="/reset-password/:token" component={ResetPasswordPage} />
       <Route path="/dashboard">
         <Protected>
           <DashboardPage />

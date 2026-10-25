@@ -20,6 +20,7 @@ import { checkGamesForWeek, getLiveScoresForWeek } from "./scores";
 import { autoGradeEnabled, getAutoGradeStatus } from "./auto-grade";
 import { importEspnGamesForWeek } from "./schedule";
 import { getTeamInfo } from "./teams";
+import { passwordResetEnabled, requestPasswordReset, verifyResetToken } from "./password-reset";
 import { z } from "zod";
 import { cached, invalidate, keys, prefixes, cacheStats } from "./cache";
 
@@ -50,6 +51,42 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.post("/api/auth/logout", requireAuth, async (req, res) => {
     clearAuthCookie(req, res);
     res.json({ ok: true });
+  });
+
+  // Public: lets the login page know whether "Forgot password?" can email a link.
+  app.get("/api/auth/config", (_req, res) => {
+    res.json({ passwordResetEnabled: passwordResetEnabled() });
+  });
+
+  // Always answers the same way whether or not the email is a member's, so
+  // the form can't be used to find out who's in the league. Rate-limited.
+  app.post("/api/auth/forgot-password", async (req, res) => {
+    if (!passwordResetEnabled()) return res.status(503).json({ message: "Password reset by email isn't set up. Ask the commissioner." });
+    const parsed = z.object({ email: z.string().email().max(254) }).safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: "Enter a valid email address" });
+    // Send in the background so response time doesn't reveal whether it matched.
+    requestPasswordReset(parsed.data.email, req.ip ?? "unknown").catch((err) =>
+      console.error("[password-reset] email failed:", err instanceof Error ? err.message : err),
+    );
+    res.json({ ok: true });
+  });
+
+  // Sets a new password from an emailed link, signs out every other device,
+  // and logs this one in.
+  app.post("/api/auth/reset-password", async (req, res) => {
+    if (!passwordResetEnabled()) return res.status(503).json({ message: "Password reset by email isn't set up. Ask the commissioner." });
+    const parsed = z.object({ token: z.string().min(1).max(200), newPassword: z.string().min(6).max(200) }).safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: "New password must be at least 6 characters" });
+    const user = await verifyResetToken(parsed.data.token);
+    if (!user) return res.status(400).json({ message: "This reset link has expired or was already used. Ask for a new one." });
+    const token = generateToken();
+    const updated = await storage.updateUser(user.id, {
+      passwordHash: hashPassword(parsed.data.newPassword),
+      mustChangePassword: false,
+      authToken: token,
+    });
+    setAuthCookie(req, res, token);
+    res.json({ user: toPublicUser(updated ?? { ...user, authToken: token }) });
   });
 
   app.get("/api/auth/me", requireAuth, async (req, res) => {

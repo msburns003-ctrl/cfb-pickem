@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "lucide-react";
+import { Link } from "wouter";
 
 export default function LoginPage() {
   const { login } = useAuth();
@@ -79,6 +80,9 @@ export default function LoginPage() {
             <Button type="submit" disabled={submitting} className="mt-2" data-testid="button-login">
               {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Sign in"}
             </Button>
+            <Link href="/forgot-password" className="text-center text-sm text-muted-foreground hover:underline" data-testid="link-forgot-password">
+              Forgot password?
+            </Link>
             <p className="text-center text-xs text-muted-foreground">
               Don&apos;t have an account? Ask your commissioner to add you.
             </p>
