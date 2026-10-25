@@ -2,6 +2,7 @@ import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import type { Request, Response, NextFunction } from "express";
 import { storage } from "./storage";
 import type { User } from "@shared/schema";
+import { memberRequestAllowed } from "./rate-limit";
 
 export function hashPassword(password: string): string {
   const salt = randomBytes(16).toString("hex");
@@ -108,14 +109,24 @@ function extractToken(req: Request): string | undefined {
   return cookies[AUTH_COOKIE_NAME];
 }
 
+// Session tokens are always 64 hex characters (generateToken), so anything
+// else is rejected without a database lookup.
+const TOKEN_FORMAT = /^[0-9a-f]{64}$/;
+
 export async function requireAuth(req: Request, res: Response, next: NextFunction) {
   const token = extractToken(req);
   if (!token) {
     return res.status(401).json({ message: "Not authenticated" });
   }
-  const user = await storage.getUserByToken(token);
+  const user = TOKEN_FORMAT.test(token) ? await storage.getUserByToken(token) : undefined;
   if (!user) {
     return res.status(401).json({ message: "Session expired, please log in again" });
+  }
+  // Per-member request limits (see rate-limit.ts), applied once we know who it is.
+  const limit = memberRequestAllowed(user, req.method);
+  if (!limit.allowed) {
+    res.setHeader("Retry-After", String(Math.ceil(limit.retryAfterMs / 1000)));
+    return res.status(429).json({ message: "Too many requests. Wait a moment and try again." });
   }
   req.user = user;
   next();

@@ -7,6 +7,7 @@ import { db, fake, game, pick, resetDb, user, week } from "./fake-storage";
 vi.mock("../server/storage", () => ({ storage: fake }));
 const { registerRoutes } = await import("../server/routes");
 const { hashPassword } = await import("../server/auth");
+const { resetAllLimits } = await import("../server/rate-limit");
 
 let server: Server;
 let base = "";
@@ -21,6 +22,7 @@ beforeAll(async () => {
 afterAll(() => server.close());
 beforeEach(() => {
   resetDb();
+  resetAllLimits();
   user({ id: 1, name: "Matt", email: "matt@example.com", passwordHash: hashPassword("secret1") });
   user({ id: 2, name: "Admin", email: "admin@example.com", passwordHash: hashPassword("secret1"), isAdmin: true });
 });

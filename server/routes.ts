@@ -20,6 +20,7 @@ import { checkGamesForWeek, getLiveScoresForWeek } from "./scores";
 import { autoGradeEnabled, getAutoGradeStatus } from "./auto-grade";
 import { importEspnGamesForWeek } from "./schedule";
 import { getTeamInfo } from "./teams";
+import { clearLoginFailures, lockoutMessage, loginLocked, recordLoginFailure } from "./rate-limit";
 import { passwordResetEnabled, requestPasswordReset, verifyResetToken } from "./password-reset";
 import { z } from "zod";
 import { cached, invalidate, keys, prefixes, cacheStats } from "./cache";
@@ -30,10 +31,20 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const schema = z.object({ email: z.string().email(), password: z.string().min(1) });
     const parsed = schema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: "Email and password are required" });
+    // Locked after too many failures for this account, even with the right
+    // password, so guessing can't simply continue (see rate-limit.ts).
+    const locked = loginLocked(parsed.data.email);
+    if (!locked.allowed) {
+      res.setHeader("Retry-After", String(Math.ceil(locked.retryAfterMs / 1000)));
+      return res.status(429).json({ message: lockoutMessage(locked.retryAfterMs) });
+    }
     const user = await storage.getUserByEmail(parsed.data.email);
     if (!user || !verifyPassword(parsed.data.password, user.passwordHash)) {
+      // Counted for unknown emails too, so responses don't reveal which emails exist.
+      recordLoginFailure(parsed.data.email);
       return res.status(401).json({ message: "Invalid email or password" });
     }
+    clearLoginFailures(parsed.data.email);
     // Members have one session token, shared by every device they log in on,
     // so logging in on a phone (or the home-screen app, which keeps its own
     // cookies on iPhone) no longer logs them out everywhere else.
@@ -101,9 +112,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const schema = z.object({ currentPassword: z.string().min(1), newPassword: z.string().min(6) });
     const parsed = schema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: "New password must be at least 6 characters" });
+    // Wrong current passwords count toward the same per-account lockout as logins.
+    const locked = loginLocked(req.user!.email);
+    if (!locked.allowed) {
+      res.setHeader("Retry-After", String(Math.ceil(locked.retryAfterMs / 1000)));
+      return res.status(429).json({ message: lockoutMessage(locked.retryAfterMs) });
+    }
     if (!verifyPassword(parsed.data.currentPassword, req.user!.passwordHash)) {
+      recordLoginFailure(req.user!.email);
       return res.status(400).json({ message: "Current password is incorrect" });
     }
+    clearLoginFailures(req.user!.email);
     // A new token signs out every other device; this one stays logged in.
     const token = generateToken();
     await storage.updateUser(req.user!.id, {
