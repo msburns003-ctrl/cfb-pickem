@@ -56,6 +56,7 @@ server/
   scores.ts             fetches live and final scores from the ESPN public scoreboard
   auto-grade.ts         background job: saves final scores, grades, and sets up the next week
   schedule.ts           imports a week's games and lines from ESPN; creates the next week
+  teams.ts              team logos and abbreviations from ESPN's teams list (in memory, no DB)
   storage.ts            all Supabase reads/writes
   cache.ts              in-memory response caching
 shared/schema.ts        types and Zod validation shared by client and server

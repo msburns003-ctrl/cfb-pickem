@@ -126,6 +126,8 @@ export const keys = {
   dashboard: (userId: number, weekId: number) =>
     `dashboard:v1:${userId}:${weekId}`,
   liveScores: (weekId: number) => `live:v1:${weekId}`,
+  teams: (weekId: number) => `teams:v1:${weekId}`,
+  consensus: (weekId: number) => `consensus:v1:${weekId}`,
   // Under the standings prefix so grading and admin writes invalidate it too.
   seasonStats: () => "standings:stats:v1",
 } as const;

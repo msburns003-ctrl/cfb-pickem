@@ -5,6 +5,8 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { GridByGame } from "@/components/GridByGame";
+import { TeamLogo } from "@/components/TeamLogo";
+import { useTeamInfo } from "@/hooks/use-team-info";
 import { scoreFor, tallyWeek, type WeekTally } from "@/lib/projection";
 import { LayoutGrid, Lock, TrendingUp } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -50,6 +52,30 @@ export default function GridPage() {
 
   const now = useNow();
   const liveScores = useLiveScores(activeWeekId, [...(data?.games ?? []), ...(data?.upsetGames ?? [])], now);
+  const teamInfo = useTeamInfo(activeWeekId);
+  // Column header team: logo + abbreviation when available, else the shortened name.
+  const headerTeam = (team: string, rank: number | null) => {
+    const info = teamInfo[team];
+    if (!info?.logo || !info.abbreviation) return shortTeamLabel(team, rank);
+    return (
+      <span className="inline-flex items-center gap-1 align-middle">
+        <TeamLogo info={info} size={16} />
+        {rank ? `#${rank} ${info.abbreviation}` : info.abbreviation}
+      </span>
+    );
+  };
+  // A picked team as logo + abbreviation when ESPN has them (more compact
+  // than a cut-off name), else the shortened name. Full name on hover.
+  const teamCell = (team: string) => {
+    const info = teamInfo[team];
+    if (!info?.logo || !info.abbreviation) return shortTeam(team);
+    return (
+      <span className="inline-flex items-center gap-1 align-middle" title={team}>
+        <TeamLogo info={info} size={16} />
+        {info.abbreviation}
+      </span>
+    );
+  };
   const tallies = new Map<number, WeekTally>(
     (data?.grid ?? []).map((row) => [
       row.userId,
@@ -151,6 +177,7 @@ export default function GridPage() {
                 liveScores={liveScores}
                 currentUserId={user?.id}
                 projected={showProjection ? tallies : null}
+                teamInfo={teamInfo}
               />
             </div>
           )}
@@ -181,7 +208,9 @@ export default function GridPage() {
                     {data.games.map((g) => (
                       <th key={g.id} className="px-3 py-2 text-center font-medium whitespace-nowrap">
                         <div>
-                          {shortTeamLabel(g.awayTeam, g.awayRank)} @ {shortTeamLabel(g.homeTeam, g.homeRank)}
+                          <span title={`${g.awayTeam} @ ${g.homeTeam}`}>
+                            {headerTeam(g.awayTeam, g.awayRank)} @ {headerTeam(g.homeTeam, g.homeRank)}
+                          </span>
                           {g.isMoneyGame && <Badge variant="outline" className="ml-1 text-accent">$</Badge>}
                         </div>
                         <div className="mt-0.5 text-[10px] font-normal text-muted-foreground/80">
@@ -302,7 +331,7 @@ export default function GridPage() {
                               status === "losing" && "text-destructive/60",
                             )}
                           >
-                            {pick ? shortTeam(pick.selectedTeam) : <span className="text-muted-foreground">—</span>}
+                            {pick ? teamCell(pick.selectedTeam) : <span className="text-muted-foreground">—</span>}
                           </td>
                         );
                       })}
@@ -321,7 +350,7 @@ export default function GridPage() {
                       >
                         {row.upsetPick ? (
                           <>
-                            {shortTeam(row.upsetPick.underdogTeam)}
+                            {teamCell(row.upsetPick.underdogTeam)}
                             {row.upsetPick.result !== "pending" && (
                               <span className="ml-1 text-xs opacity-80">
                                 {row.upsetPick.result === "win"

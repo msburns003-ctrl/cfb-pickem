@@ -110,7 +110,7 @@ const TEAM_ALIASES: Record<string, string> = {
   "cal": "california",
 };
 
-function normalizeTeamName(name: string): string {
+export function normalizeTeamName(name: string): string {
   const base = name
     .toLowerCase()
     .normalize("NFKD")
@@ -123,7 +123,7 @@ function normalizeTeamName(name: string): string {
   return TEAM_ALIASES[base] ?? base;
 }
 
-function teamNamesMatch(ours: string, team: EspnTeam): boolean {
+export function teamNamesMatch(ours: string, team: EspnTeam): boolean {
   const a = normalizeTeamName(ours);
   if (!a) return false;
 
