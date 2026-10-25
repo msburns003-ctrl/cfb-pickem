@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation, useParams } from "wouter";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -6,6 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { BarChart3, ArrowUp, ArrowDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth";
+import { WeekPicks } from "@/components/WeekPicks";
 import type { MemberSeasonStats, PickRecord, SeasonStatsResponse } from "@shared/schema";
 
 function ordinal(n: number) {
@@ -46,7 +47,17 @@ function RecordTile({ label, record, testId }: { label: string; record: PickReco
 
 // One bar per graded week (this member's points), with the league average as
 // a dashed reference mark. Hover or focus a bar for the details.
-function WeeklyPointsChart({ member, data }: { member: MemberSeasonStats; data: SeasonStatsResponse }) {
+function WeeklyPointsChart({
+  member,
+  data,
+  selectedWeekId,
+  onSelect,
+}: {
+  member: MemberSeasonStats;
+  data: SeasonStatsResponse;
+  selectedWeekId: number | null;
+  onSelect: (weekId: number) => void;
+}) {
   const [active, setActive] = useState<number | null>(null);
   const memberCount = data.members.length;
   const max = Math.max(1, ...member.weeks.map((w) => w.points), ...data.weeks.map((w) => w.leagueAverage));
@@ -55,7 +66,9 @@ function WeeklyPointsChart({ member, data }: { member: MemberSeasonStats; data: 
   return (
     <div className="rounded-lg border border-card-border bg-card p-4" data-testid="chart-weekly-points">
       <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="text-sm font-semibold">Points by week</h2>
+        <h2 className="text-sm font-semibold">
+          Points by week <span className="font-normal text-muted-foreground">· tap a week to see the picks</span>
+        </h2>
         <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
           <span className="inline-block w-4 border-t-2 border-dashed border-muted-foreground" aria-hidden /> League average
         </span>
@@ -70,7 +83,15 @@ function WeeklyPointsChart({ member, data }: { member: MemberSeasonStats; data: 
               key={w.weekId}
               role="listitem"
               tabIndex={0}
-              className="group relative flex h-full flex-1 cursor-default items-end justify-center outline-none"
+              className="group relative flex h-full flex-1 cursor-pointer items-end justify-center rounded outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              aria-current={selectedWeekId === w.weekId ? "true" : undefined}
+              onClick={() => onSelect(w.weekId)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  onSelect(w.weekId);
+                }
+              }}
               onMouseEnter={() => setActive(i)}
               onMouseLeave={() => setActive(null)}
               onFocus={() => setActive(i)}
@@ -78,7 +99,12 @@ function WeeklyPointsChart({ member, data }: { member: MemberSeasonStats; data: 
               aria-label={`${week.label}: ${w.points} points, ${ordinal(w.weekRank)} that week, league average ${week.leagueAverage}`}
             >
               <div
-                className={cn("w-full max-w-10 rounded-t bg-accent transition-opacity", active !== null && active !== i && "opacity-50")}
+                className={cn(
+                  "w-full max-w-10 rounded-t bg-accent transition-opacity",
+                  active !== null && active !== i && "opacity-50",
+                  selectedWeekId !== null && selectedWeekId !== w.weekId && active === null && "opacity-60",
+                  selectedWeekId === w.weekId && "ring-2 ring-foreground ring-offset-2 ring-offset-card",
+                )}
                 style={{ height: Math.max(barH, w.points > 0 ? 4 : 0) }}
               />
               <div
@@ -115,7 +141,17 @@ function WeeklyPointsChart({ member, data }: { member: MemberSeasonStats; data: 
   );
 }
 
-function WeekTable({ member, data }: { member: MemberSeasonStats; data: SeasonStatsResponse }) {
+function WeekTable({
+  member,
+  data,
+  selectedWeekId,
+  onSelect,
+}: {
+  member: MemberSeasonStats;
+  data: SeasonStatsResponse;
+  selectedWeekId: number | null;
+  onSelect: (weekId: number) => void;
+}) {
   return (
     <div className="overflow-x-auto rounded-lg border border-card-border">
       <table className="w-full text-sm" data-testid="table-week-stats">
@@ -134,8 +170,12 @@ function WeekTable({ member, data }: { member: MemberSeasonStats; data: SeasonSt
             const prev = member.weeks[i - 1]?.seasonRank;
             const moved = prev == null ? 0 : prev - w.seasonRank;
             return (
-              <tr key={w.weekId} className="border-b border-card-border last:border-0">
-                <td className="px-3 py-2">{week.label}</td>
+              <tr key={w.weekId} className={cn("border-b border-card-border last:border-0", selectedWeekId === w.weekId && "bg-accent/10")}>
+                <td className="px-3 py-2">
+                  <button type="button" className="font-medium text-primary hover:underline" onClick={() => onSelect(w.weekId)} data-testid={`button-week-${w.weekId}`}>
+                    {week.label}
+                  </button>
+                </td>
                 <td className="px-3 py-2 text-right font-medium tabular-nums">{w.points}</td>
                 <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">{week.leagueAverage}</td>
                 <td className="px-3 py-2 text-right tabular-nums">{ordinal(w.weekRank)}</td>
@@ -162,6 +202,9 @@ export default function StatsPage() {
   const { data, isLoading } = useQuery<SeasonStatsResponse>({ queryKey: ["/api/stats"] });
 
   const memberId = params.id ? Number(params.id) : user?.id;
+  // Week whose picks are shown below the chart; cleared when switching members.
+  const [selectedWeekId, setSelectedWeekId] = useState<number | null>(null);
+  useEffect(() => setSelectedWeekId(null), [memberId]);
 
   if (isLoading || !data) {
     return (
@@ -252,8 +295,17 @@ export default function StatsPage() {
             />
           </div>
 
-          <WeeklyPointsChart member={member} data={data} />
-          <WeekTable member={member} data={data} />
+          <WeeklyPointsChart member={member} data={data} selectedWeekId={selectedWeekId} onSelect={setSelectedWeekId} />
+          {selectedWeekId !== null && (
+            <WeekPicks
+              weekId={selectedWeekId}
+              weekLabel={data.weeks.find((w) => w.id === selectedWeekId)?.label ?? "Week"}
+              userId={member.userId}
+              memberName={member.name}
+              isYou={member.userId === user?.id}
+            />
+          )}
+          <WeekTable member={member} data={data} selectedWeekId={selectedWeekId} onSelect={setSelectedWeekId} />
           <p className="text-xs text-muted-foreground">
             Records count graded picks; pushes are picks on games that landed exactly on the spread. Streaks skip pushes.
             Weekly points include upset picks but not Cristo-Ball.
