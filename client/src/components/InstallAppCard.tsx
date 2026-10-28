@@ -2,7 +2,16 @@ import { useEffect, useState } from "react";
 import { Share, PlusSquare, Smartphone, Download, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { canPromptInstall, isIOS, isRunningAsApp, onInstallPromptChange, promptInstall } from "@/lib/install";
+import {
+  canPromptInstall,
+  dismissInstallBanner,
+  installBannerDismissed,
+  isIOS,
+  isPhoneOrTablet,
+  isRunningAsApp,
+  onInstallPromptChange,
+  promptInstall,
+} from "@/lib/install";
 
 function useCanInstall() {
   const [canInstall, setCanInstall] = useState(canPromptInstall);
@@ -65,19 +74,23 @@ export function InstallAppCard() {
   );
 }
 
-// Temporary announcement on the picks page while the league hears about the
-// app. Shows until `until` (an ISO time), not once opened as an app, and can
-// be closed for the visit (nothing is stored).
-export function InstallAppBanner({ until, now }: { until: string; now: number }) {
-  const [closed, setClosed] = useState(false);
-  if (closed || now >= new Date(until).getTime() || isRunningAsApp()) return null;
+// Picks-page banner inviting members on a phone or tablet browser to add the
+// app to their home screen. Never shown inside the installed app or on
+// desktop; closing it hides it on that device for 30 days.
+export function InstallAppBanner() {
+  const [closed, setClosed] = useState(installBannerDismissed);
+  if (closed || isRunningAsApp() || !isPhoneOrTablet()) return null;
+  const close = () => {
+    dismissInstallBanner();
+    setClosed(true);
+  };
   return (
     <div
       className="relative flex flex-col gap-2 rounded-lg border border-accent/40 bg-accent/10 p-4 pr-10 text-sm text-muted-foreground"
       data-testid="banner-install-app"
     >
       <p className="flex items-center gap-2 font-semibold text-foreground">
-        <Smartphone className="h-4 w-4 text-accent" /> New: Pick'em on your home screen
+        <Smartphone className="h-4 w-4 text-accent" /> Get Pick'em on your home screen
       </p>
       <p>Open it like an app, full screen, with one tap.</p>
       <InstallInstructions />
@@ -87,7 +100,7 @@ export function InstallAppBanner({ until, now }: { until: string; now: number })
           variant="ghost"
           size="icon"
           className="h-8 w-8"
-          onClick={() => setClosed(true)}
+          onClick={close}
           aria-label="Close"
           data-testid="button-close-install-banner"
         >
