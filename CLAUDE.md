@@ -4,6 +4,8 @@ This is the 2026 college football pick'em league app. Live site: https://cfb-pic
 
 Read this file before making changes. The "Rules that must not break" section lists product and security decisions the league has already settled.
 
+Then read [`docs/PROJECT_NOTES.md`](docs/PROJECT_NOTES.md): current status, open items waiting on the commissioner, things not yet verified live, past decisions and trade-offs, and the backlog. Keep it up to date when you finish work.
+
 ## Stack
 
 - **Frontend:** React + TypeScript + Vite, Tailwind CSS, shadcn/ui (Radix) components, TanStack Query, wouter routing. Source in `client/src/`.
