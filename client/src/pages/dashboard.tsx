@@ -17,9 +17,6 @@ import { WeekSummary, type SeasonStanding } from "@/components/WeekSummary";
 import { WeekRecap } from "@/components/WeekRecap";
 import { useConsensus, useTeamInfo } from "@/hooks/use-team-info";
 import { InstallAppBanner } from "@/components/InstallAppCard";
-
-// Home-screen app announcement: Sunday, Oct 25, 2026, 6 PM ET.
-const INSTALL_BANNER_UNTIL = "2026-10-25T22:00:00Z";
 import { useAuth } from "@/lib/auth";
 import { formatEastern } from "@/lib/time";
 import { Save } from "lucide-react";
@@ -409,7 +406,7 @@ export default function DashboardPage() {
 
   return (
     <div className={cn("flex flex-col gap-6", unsavedCount > 0 && "pb-20")}>
-      <InstallAppBanner until={INSTALL_BANNER_UNTIL} now={now} />
+      <InstallAppBanner />
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="font-display text-xl font-semibold tracking-tight" data-testid="text-week-label">
