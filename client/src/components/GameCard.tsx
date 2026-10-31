@@ -5,7 +5,7 @@ import { formatEastern } from "@/lib/time";
 import { Tv, Check, X, Coins, Users } from "lucide-react";
 import type { Game, LiveScore, Pick, TeamInfo } from "@shared/schema";
 import { TeamLogo } from "@/components/TeamLogo";
-import { livePickStatus, type LivePickStatus } from "@shared/outcome";
+import { livePickStatus, pickResult, type LivePickStatus, type PickResult } from "@shared/outcome";
 
 function teamLabel(team: string, rank: number | null) {
   return rank ? `#${rank} ${team}` : team;
@@ -14,6 +14,22 @@ function teamLabel(team: string, rank: number | null) {
 const LIVE_STATUS_TEXT: Record<"SU" | "ATS", Record<LivePickStatus, string>> = {
   SU: { winning: "winning", losing: "losing", even: "tied" },
   ATS: { winning: "covering", losing: "not covering", even: "right on the spread" },
+};
+
+// Picked team's button: a soft tint, colored border and colored text. Green
+// won, red lost, grey push, blue still to be decided. Locked buttons stay
+// fully opaque so the color reads.
+const PICK_COLORS: Record<PickResult, string> = {
+  won: "bg-green-500/10 text-green-700 border-green-600/60 dark:bg-green-500/15 dark:text-green-400 dark:border-green-500/50",
+  lost: "bg-red-500/10 text-red-700 border-red-600/60 dark:bg-red-500/15 dark:text-red-400 dark:border-red-500/50",
+  push: "bg-zinc-500/10 text-zinc-600 border-zinc-400 dark:bg-zinc-400/10 dark:text-zinc-300 dark:border-zinc-500",
+  pending: "bg-blue-500/10 text-blue-700 border-blue-600/60 dark:bg-blue-500/15 dark:text-blue-400 dark:border-blue-500/50",
+};
+
+const RESULT_TEXT: Record<Exclude<PickResult, "pending">, string> = {
+  won: "text-green-600 dark:text-green-400",
+  lost: "text-destructive",
+  push: "text-muted-foreground",
 };
 
 type Split = { awayCount: number; homeCount: number; totalPicks: number };
@@ -70,6 +86,9 @@ export function GameCard({ game, pick, selectedTeam, unsaved, locked, kickedOff,
       : live;
   const pickStatus =
     score && selectedTeam && !unsaved ? livePickStatus(game, selectedTeam, score.awayScore, score.homeScore) : null;
+  const result = unsaved
+    ? "pending"
+    : pickResult(game, pick, selectedTeam, score?.state === "post" ? score : null);
 
   return (
     <div className="rounded-lg border border-card-border bg-card p-4" data-testid={`card-game-${game.id}`}>
@@ -115,12 +134,11 @@ export function GameCard({ game, pick, selectedTeam, unsaved, locked, kickedOff,
               onClick={() => onSelect?.(team)}
               className={cn(
                 "h-auto flex-col items-center gap-0.5 py-3 whitespace-normal text-center",
-                graded && selected && pick?.isCorrect && "ring-2 ring-primary",
-                graded && selected && pick?.isCorrect === false && "ring-2 ring-destructive",
+                selected && ["shadow-none disabled:opacity-100", PICK_COLORS[result]],
               )}
               data-testid={`button-pick-${game.id}-${team.replace(/\s/g, "-")}`}
             >
-              <TeamLogo info={teamInfo?.[team]} size={28} backdrop={selected} className="mb-1" />
+              <TeamLogo info={teamInfo?.[team]} size={28} className="mb-1" />
               <span className="text-sm font-semibold leading-tight">{teamLabel(team, rank)}</span>
               <span className="text-xs opacity-80">{line}</span>
             </Button>
@@ -130,13 +148,17 @@ export function GameCard({ game, pick, selectedTeam, unsaved, locked, kickedOff,
 
       {graded && pick && (
         <div className="mt-3 flex items-center gap-1.5 text-sm">
-          {pick.isCorrect ? (
-            <Check className="h-4 w-4 text-primary" />
-          ) : (
-            <X className="h-4 w-4 text-destructive" />
-          )}
-          <span className={pick.isCorrect ? "text-primary font-medium" : "text-destructive font-medium"}>
-            {pick.isCorrect ? `+${pick.pointsEarned} point${pick.pointsEarned === 1 ? "" : "s"}` : "0 points"}
+          {result === "won" ? (
+            <Check className={cn("h-4 w-4", RESULT_TEXT.won)} />
+          ) : result === "lost" ? (
+            <X className={cn("h-4 w-4", RESULT_TEXT.lost)} />
+          ) : null}
+          <span className={cn("font-medium", result !== "pending" && RESULT_TEXT[result])}>
+            {result === "won"
+              ? `+${pick.pointsEarned} point${pick.pointsEarned === 1 ? "" : "s"}`
+              : result === "push"
+                ? "Push · 0 points"
+                : "0 points"}
           </span>
           {game.awayScore != null && game.homeScore != null && (
             <span className="text-muted-foreground">
