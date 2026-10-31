@@ -2,7 +2,7 @@
 
 Living notes so a new session (or person) can pick up where the last one left off. `CLAUDE.md` holds the rules; this file holds the state. Update it when something here changes.
 
-_Last updated: October 28, 2026._
+_Last updated: October 31, 2026._
 
 ## Status
 
@@ -18,6 +18,8 @@ _Last updated: October 28, 2026._
 
 ## Not yet verified against the live site
 
+- **Geist styling refresh** (branch `claude/geist-styling`): checked only on the login page and an empty dashboard with mocked data. After publishing, look over picks, grid, standings, stats and admin in light and dark mode for any colors that read poorly against the new neutral palette.
+
 ESPN is blocked from the dev environment, so these were tested only with stubbed data. Check them after the first real run:
 
 - **Automatic next-week setup and Import from ESPN** (`server/schedule.ts`): first real run is after week 8 is fully graded. Check that week 9 appears in Setup with sensible spreads, favorites and TV.
@@ -32,6 +34,8 @@ ESPN is blocked from the dev environment, so these were tested only with stubbed
 - **Per-device preferences use `__Host-` cookies** (theme, install-banner dismissal), never browser storage.
 - **Home-screen app has no service worker or offline mode** (would need on-device storage).
 - **The league split ("how you compare")** is only shown for games past kickoff, so it can't influence picks.
+- **Next.js look, not Next.js itself** (Oct 31): the site borrows the Geist/Vercel visual style (fonts, neutral palette, thin borders) but stays on Vite + Express. A Next.js migration would mean rewriting routing and data fetching, and it is unclear whether pplx.app can host a Next.js server. Revisit only in the off-season.
+- **Header stays dark in light mode** so the iPhone home-screen status bar (`black-translucent`, white text) stays readable.
 - **Grading waits for the pick deadline** because money games are assigned when picks lock.
 
 ## Testing notes
