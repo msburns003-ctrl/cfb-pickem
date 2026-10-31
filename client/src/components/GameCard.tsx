@@ -16,13 +16,14 @@ const LIVE_STATUS_TEXT: Record<"SU" | "ATS", Record<LivePickStatus, string>> = {
   ATS: { winning: "covering", losing: "not covering", even: "right on the spread" },
 };
 
-// Fill for the picked team's button: green won, red lost, grey push, blue
-// still to be decided. Locked buttons stay fully opaque so the color reads.
+// Picked team's button: a soft tint, colored border and colored text. Green
+// won, red lost, grey push, blue still to be decided. Locked buttons stay
+// fully opaque so the color reads.
 const PICK_COLORS: Record<PickResult, string> = {
-  won: "bg-green-600 text-white border-green-700 disabled:opacity-100",
-  lost: "bg-destructive text-destructive-foreground border-destructive-border disabled:opacity-100",
-  push: "bg-zinc-500 text-white border-zinc-600 disabled:opacity-100",
-  pending: "bg-blue-600 text-white border-blue-700 disabled:opacity-100",
+  won: "bg-green-500/10 text-green-700 border-green-600/60 dark:bg-green-500/15 dark:text-green-400 dark:border-green-500/50",
+  lost: "bg-red-500/10 text-red-700 border-red-600/60 dark:bg-red-500/15 dark:text-red-400 dark:border-red-500/50",
+  push: "bg-zinc-500/10 text-zinc-600 border-zinc-400 dark:bg-zinc-400/10 dark:text-zinc-300 dark:border-zinc-500",
+  pending: "bg-blue-500/10 text-blue-700 border-blue-600/60 dark:bg-blue-500/15 dark:text-blue-400 dark:border-blue-500/50",
 };
 
 const RESULT_TEXT: Record<Exclude<PickResult, "pending">, string> = {
@@ -133,11 +134,11 @@ export function GameCard({ game, pick, selectedTeam, unsaved, locked, kickedOff,
               onClick={() => onSelect?.(team)}
               className={cn(
                 "h-auto flex-col items-center gap-0.5 py-3 whitespace-normal text-center",
-                selected && PICK_COLORS[result],
+                selected && ["shadow-none disabled:opacity-100", PICK_COLORS[result]],
               )}
               data-testid={`button-pick-${game.id}-${team.replace(/\s/g, "-")}`}
             >
-              <TeamLogo info={teamInfo?.[team]} size={28} backdrop={selected} className="mb-1" />
+              <TeamLogo info={teamInfo?.[team]} size={28} className="mb-1" />
               <span className="text-sm font-semibold leading-tight">{teamLabel(team, rank)}</span>
               <span className="text-xs opacity-80">{line}</span>
             </Button>

@@ -4,9 +4,9 @@
 
 ## What changed
 
-- The picked team's button is now colored by how the pick turned out: **green** won, **red** lost, **grey** push (exactly on the spread), **blue** not decided yet (before kickoff, in progress, or an unsaved selection).
+- The picked team's button is now a soft tint with a colored border and text (instead of a solid fill), colored by how the pick turned out: **green** won, **red** lost, **grey** push (exactly on the spread), **blue** not decided yet (before kickoff, in progress, or an unsaved selection).
 - Graded games use the official grade. A final score that isn't graded yet uses the same unofficial result the card already shows in text ("unofficial until the week is graded").
-- Locked picks keep full color instead of being faded like other locked buttons.
+- Locked picks keep full color instead of being faded like other locked buttons. Team logos on the picked button no longer need the white circle behind them, since the tint is light.
 - The "+N points" result text, on game cards and the underdog bonus pick, is green instead of the red primary color. A graded spread push now reads "Push · 0 points" instead of a red "0 points".
 - `tests/schedule.test.ts`: one import test used sample games dated October 31, 2026, so it started failing once those kickoffs passed in real time (line refreshes skip games that have kicked off). The test now pins the clock to October 30. Test-only change; app behavior unchanged.
 
