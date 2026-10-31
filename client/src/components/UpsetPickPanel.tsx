@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Flame, Check, X } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { formatEastern } from "@/lib/time";
 import type { Game, UpsetPick } from "@shared/schema";
 
 function teamLabel(team: string, rank: number | null) {
@@ -38,7 +39,19 @@ export function UpsetPickPanel({ availableGames, myUpsetPick, locked, now, onSub
 
   const notStarted = (g: Game) => now < new Date(g.kickoff).getTime();
   // Only games that haven't kicked off can be chosen; the server rejects the rest.
-  const openGames = availableGames.filter(notStarted);
+  const openGames = availableGames.filter(notStarted).sort((a, b) => a.kickoff.localeCompare(b.kickoff) || a.spread - b.spread);
+  const chosenGame = openGames.find((g) => String(g.id) === selectedGameId);
+  const chosen = chosenGame && {
+    game: chosenGame,
+    underdog: chosenGame.favoriteTeam === chosenGame.awayTeam ? chosenGame.homeTeam : chosenGame.awayTeam,
+    points: upsetPickPoints(chosenGame.spread),
+  };
+  // Grouped by kickoff day (Eastern) so a long list is easy to scan.
+  const byDay = new Map<string, Game[]>();
+  for (const g of openGames) {
+    const day = formatEastern(g.kickoff, { weekday: "short", month: "short", day: "numeric" });
+    byDay.set(day, [...(byDay.get(day) ?? []), g]);
+  }
   const pickedGame = myUpsetPick ? availableGames.find((g) => g.id === myUpsetPick.gameId) : undefined;
   // The current pick can be swapped until the week locks or its game kicks off.
   const canChange = !locked && !!myUpsetPick && myUpsetPick.result === "pending" && !!pickedGame && notStarted(pickedGame);
@@ -117,26 +130,43 @@ export function UpsetPickPanel({ availableGames, myUpsetPick, locked, now, onSub
           {availableGames.length === 0 ? "No other games available this week." : "All other games this week have kicked off."}
         </p>
       ) : (
+        <>
         <div className="flex flex-col gap-2 sm:flex-row">
-          <Select value={selectedGameId} onValueChange={setSelectedGameId} disabled={locked}>
-            <SelectTrigger className="flex-1" data-testid="select-upset-game">
-              <SelectValue placeholder="Choose a game and underdog..." />
-            </SelectTrigger>
-            <SelectContent>
-              {openGames.map((g) => {
-                const underdogIsAway = g.favoriteTeam !== g.awayTeam;
-                const underdog = underdogIsAway ? g.awayTeam : g.homeTeam;
-                const underdogRank = underdogIsAway ? g.awayRank : g.homeRank;
-                const favoriteRank = underdogIsAway ? g.homeRank : g.awayRank;
-                const pts = upsetPickPoints(g.spread);
-                return (
-                  <SelectItem key={g.id} value={String(g.id)}>
-                    {teamLabel(underdog, underdogRank)} (+{g.spread}) vs {teamLabel(g.favoriteTeam, favoriteRank)} — {pts} pt{pts === 1 ? "" : "s"}
-                  </SelectItem>
-                );
-              })}
-            </SelectContent>
-          </Select>
+          {/* A native <select>: phones show their own picker (the iOS wheel, the
+              Android list), which always scrolls, even with dozens of games. */}
+          <select
+            value={selectedGameId}
+            onChange={(e) => setSelectedGameId(e.target.value)}
+            disabled={locked}
+            aria-label="Choose a game and underdog"
+            className={cn(
+              "h-10 w-full min-w-0 flex-1 rounded-md border border-input bg-background px-3 text-base text-foreground sm:text-sm", // 16px on phones: iOS zooms smaller fields
+              "focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50",
+              !selectedGameId && "text-muted-foreground",
+            )}
+            data-testid="select-upset-game"
+          >
+            <option value="" disabled>
+              Choose a game and underdog...
+            </option>
+            {Array.from(byDay.entries()).map(([day, games]) => (
+              <optgroup key={day} label={day.replace(/ ET$/, "")}>
+                {games.map((g) => {
+                  const underdogIsAway = g.favoriteTeam !== g.awayTeam;
+                  const underdog = underdogIsAway ? g.awayTeam : g.homeTeam;
+                  const underdogRank = underdogIsAway ? g.awayRank : g.homeRank;
+                  const favoriteRank = underdogIsAway ? g.homeRank : g.awayRank;
+                  const pts = upsetPickPoints(g.spread);
+                  return (
+                    <option key={g.id} value={String(g.id)}>
+                      {teamLabel(underdog, underdogRank)} (+{g.spread}) vs {teamLabel(g.favoriteTeam, favoriteRank)} — {pts} pt
+                      {pts === 1 ? "" : "s"}
+                    </option>
+                  );
+                })}
+              </optgroup>
+            ))}
+          </select>
           <Button
             disabled={locked || !selectedGameId || submitting}
             onClick={() => selectedGameId && onSubmit(Number(selectedGameId))}
@@ -150,6 +180,14 @@ export function UpsetPickPanel({ availableGames, myUpsetPick, locked, now, onSub
             </Button>
           )}
         </div>
+        {chosen && (
+          // The picker's label can be cut off on a narrow phone, so spell out the choice.
+          <p className="mt-2 text-xs text-muted-foreground" data-testid="text-upset-choice">
+            <span className="font-medium text-foreground">{chosen.underdog}</span> +{chosen.game.spread} vs {chosen.game.favoriteTeam} · worth{" "}
+            {chosen.points} point{chosen.points === 1 ? "" : "s"} if they win outright
+          </p>
+        )}
+        </>
       )}
     </div>
   );
