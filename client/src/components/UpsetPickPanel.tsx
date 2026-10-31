@@ -83,8 +83,8 @@ export function UpsetPickPanel({ availableGames, myUpsetPick, locked, now, onSub
           <div className="mt-2 flex items-center gap-1.5 text-sm">
             {myUpsetPick.result === "win" ? (
               <>
-                <Check className="h-4 w-4 text-primary" />
-                <span className="font-medium text-primary">+{myUpsetPick.pointsEarned} points</span>
+                <Check className="h-4 w-4 text-green-600 dark:text-green-400" />
+                <span className="font-medium text-green-600 dark:text-green-400">+{myUpsetPick.pointsEarned} points</span>
               </>
             ) : myUpsetPick.result === "push" ? (
               <span className="font-medium text-muted-foreground">Push · 0 points</span>

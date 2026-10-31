@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { coveringTeam, livePickStatus, outcomeFromScores, upsetPickPoints } from "@shared/outcome";
+import { coveringTeam, livePickStatus, outcomeFromScores, pickResult, upsetPickPoints } from "@shared/outcome";
 
 // Georgia (away) favored by 7.5 at Florida.
 const ats = { awayTeam: "Georgia", homeTeam: "Florida", favoriteTeam: "Georgia", spread: 7.5, pickType: "ATS" as const };
@@ -60,5 +60,28 @@ describe("upsetPickPoints (league rule: >=15 -> 3, >=7.5 -> 2, >=0.5 -> 1)", () 
     [-9, 2], // sign doesn't matter
   ])("spread %s is worth %s", (spread, points) => {
     expect(upsetPickPoints(spread)).toBe(points);
+  });
+});
+
+describe("pickResult", () => {
+  const scheduled = { ...ats, status: "scheduled" as const, atsResult: null };
+  const final = { ...ats, status: "final" as const, atsResult: "favorite" as const };
+
+  it("is pending with no pick, before kickoff, or while in progress", () => {
+    expect(pickResult(scheduled, null, null)).toBe("pending");
+    expect(pickResult(scheduled, { isCorrect: null, pointsEarned: null }, "Georgia")).toBe("pending");
+  });
+  it("uses the official grade once graded", () => {
+    expect(pickResult(final, { isCorrect: true, pointsEarned: 1 }, "Georgia")).toBe("won");
+    expect(pickResult(final, { isCorrect: false, pointsEarned: 0 }, "Florida")).toBe("lost");
+  });
+  it("shows a graded spread push as a push, not a loss", () => {
+    const push = { ...final, atsResult: "push" as const };
+    expect(pickResult(push, { isCorrect: false, pointsEarned: 0 }, "Georgia")).toBe("push");
+  });
+  it("uses the final score before grading", () => {
+    const ungraded = { ...final, atsResult: null };
+    expect(pickResult(ungraded, { isCorrect: null, pointsEarned: null }, "Georgia", { awayScore: 31, homeScore: 20 })).toBe("won");
+    expect(pickResult(ungraded, { isCorrect: null, pointsEarned: null }, "Florida", { awayScore: 31, homeScore: 20 })).toBe("lost");
   });
 });

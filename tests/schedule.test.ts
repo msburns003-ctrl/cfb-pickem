@@ -55,6 +55,14 @@ describe("fetchWeekCandidates", () => {
 });
 
 describe("importEspnGamesForWeek", () => {
+  // Line refreshes skip games that have kicked off, so pin the clock to the
+  // week before the sample games; otherwise this fails once their date passes.
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-30T12:00:00.000Z"));
+  });
+  afterEach(() => vi.useRealTimers());
+
   it("adds unselected candidates, reports missing lines, and refreshes only unpicked lines", async () => {
     week({ id: 9, pickDeadline: "2026-10-31T16:00:00.000Z", status: "setup" });
     const first = await importEspnGamesForWeek(9);

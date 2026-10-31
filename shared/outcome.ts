@@ -45,6 +45,31 @@ export function livePickStatus(game: GameLine, selectedTeam: string, awayScore: 
   return leader === selectedTeam ? "winning" : "losing";
 }
 
+export type PickResult = "won" | "lost" | "push" | "pending";
+
+/**
+ * How a member's pick on a game has turned out, for coloring it: graded picks
+ * use the official result; a final score not yet graded uses the unofficial
+ * result from that score; anything else (not started, in progress) is pending.
+ */
+export function pickResult(
+  game: GameLine & Pick<Game, "status" | "atsResult">,
+  pick: { isCorrect: boolean | null; pointsEarned: number | null } | null | undefined,
+  selectedTeam: string | null | undefined,
+  finalScore?: { awayScore: number; homeScore: number } | null,
+): PickResult {
+  if (!selectedTeam) return "pending";
+  if (game.status === "final" && pick && pick.pointsEarned != null && pick.isCorrect != null) {
+    if (pick.isCorrect) return "won";
+    return game.atsResult === "push" ? "push" : "lost";
+  }
+  if (finalScore) {
+    const status = livePickStatus(game, selectedTeam, finalScore.awayScore, finalScore.homeScore);
+    return status === "winning" ? "won" : status === "losing" ? "lost" : "push";
+  }
+  return "pending";
+}
+
 /** Tiered points for a winning underdog bonus pick, based on the spread magnitude. */
 export function upsetPickPoints(spread: number): number {
   const s = Math.abs(spread);
