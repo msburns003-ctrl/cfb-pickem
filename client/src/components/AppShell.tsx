@@ -45,7 +45,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-screen bg-background">
       <PullToRefresh />
-      <header className="sticky top-0 z-40 border-b border-border bg-sidebar pt-[env(safe-area-inset-top)] text-sidebar-foreground">
+      <header className="sticky top-0 z-40 border-b border-border bg-sidebar/90 backdrop-blur-md pt-[env(safe-area-inset-top)] text-sidebar-foreground">
         <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-4 py-3">
           <Link href="/dashboard" className="flex items-center gap-2 shrink-0">
             <Logo />
@@ -104,7 +104,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <main className="mx-auto max-w-5xl px-4 py-6 pb-[calc(6rem+env(safe-area-inset-bottom))] sm:pb-16">{children}</main>
 
       <nav
-        className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-sidebar pb-[env(safe-area-inset-bottom)] text-sidebar-foreground sm:hidden"
+        className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-sidebar/90 backdrop-blur-md pb-[env(safe-area-inset-bottom)] text-sidebar-foreground sm:hidden"
         aria-label="Main"
         data-testid="nav-bottom"
       >
