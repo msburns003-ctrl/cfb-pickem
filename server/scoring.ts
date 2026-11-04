@@ -62,7 +62,9 @@ export async function assignMoneyGames(weekId: number): Promise<void> {
   }
   const moneyGameIds = new Set(
     [...selectedGames]
-      .sort((a, b) => (splitDiff.get(a.id) ?? 0) - (splitDiff.get(b.id) ?? 0))
+      // Ties go to the earlier-imported game (sortOrder), as before games were
+      // listed by kickoff, so list order never changes which game is chosen.
+      .sort((a, b) => (splitDiff.get(a.id) ?? 0) - (splitDiff.get(b.id) ?? 0) || a.sortOrder - b.sortOrder)
       .slice(0, Math.max(0, week.moneyGameCount))
       .map((g) => g.id),
   );

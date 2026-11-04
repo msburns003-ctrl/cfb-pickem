@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { db, fake, game, pick, resetDb, user, week } from "./fake-storage";
 
 vi.mock("../server/storage", () => ({ storage: fake }));
-const { ATS_THRESHOLD, computePickType, computeSeasonStats, computeStandings, gradeCompletedGames } = await import("../server/scoring");
+const { ATS_THRESHOLD, assignMoneyGames, computePickType, computeSeasonStats, computeStandings, gradeCompletedGames } = await import("../server/scoring");
 
 beforeEach(resetDb);
 
@@ -109,5 +109,22 @@ describe("standings and season stats", () => {
     // A pick on a game that landed on the spread is a push in records.
     expect(ann.overall).toEqual({ wins: 1, losses: 0, pushes: 1 });
     expect(stats.weeks[0].leagueAverage).toBe(0.7);
+  });
+});
+
+describe("assignMoneyGames", () => {
+  it("picks the most evenly split games, breaking ties by import order rather than kickoff", async () => {
+    week({ id: 1, moneyGameCount: 1, moneyGamesAssigned: false });
+    // Both games have no picks (a tie). Game 21 was imported first but kicks off later.
+    game({ id: 20, weekId: 1, awayTeam: "A", homeTeam: "B", favoriteTeam: "A", spread: 3, sortOrder: 2, kickoff: "2026-10-24T16:00:00.000Z" });
+    game({ id: 21, weekId: 1, awayTeam: "C", homeTeam: "D", favoriteTeam: "C", spread: 3, sortOrder: 1, kickoff: "2026-10-24T23:00:00.000Z" });
+    // Game 22 is lopsided (2-0), so it never wins.
+    game({ id: 22, weekId: 1, awayTeam: "E", homeTeam: "F", favoriteTeam: "E", spread: 3, sortOrder: 0, kickoff: "2026-10-24T12:00:00.000Z" });
+    pick({ id: 1, gameId: 22, userId: 1, selectedTeam: "E" });
+    pick({ id: 2, gameId: 22, userId: 2, selectedTeam: "E" });
+
+    await assignMoneyGames(1);
+    const money = db.games.filter((g) => g.isMoneyGame).map((g) => g.id);
+    expect(money).toEqual([21]);
   });
 });
