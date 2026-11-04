@@ -218,8 +218,9 @@ export class DatabaseStorage implements IStorage {
       .from("games")
       .select("*")
       .eq("week_id", weekId)
-      .order("sort_order", { ascending: true })
-      .order("kickoff", { ascending: true });
+      // Kickoff time first; sort_order (ESPN import order) only breaks ties.
+      .order("kickoff", { ascending: true })
+      .order("sort_order", { ascending: true });
     assertNoError(error, "listGamesByWeek");
     return rowsToCamel<Game>(data);
   }

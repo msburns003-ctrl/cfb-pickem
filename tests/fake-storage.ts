@@ -44,7 +44,11 @@ export const fake = {
   },
   updateWeek: async (id: number, fields: Partial<Week>) => update(db.weeks, id, fields),
 
-  listGamesByWeek: async (weekId: number) => db.games.filter((g) => g.weekId === weekId).map((g) => ({ ...g })),
+  listGamesByWeek: async (weekId: number) =>
+    db.games
+      .filter((g) => g.weekId === weekId)
+      .sort((a, b) => a.kickoff.localeCompare(b.kickoff) || a.sortOrder - b.sortOrder)
+      .map((g) => ({ ...g })),
   createGames: async (games: Partial<Game>[]) =>
     games.map((g) => {
       const created = { id: nextId++, awayScore: null, homeScore: null, winner: null, atsResult: null, isMoneyGame: false, ...g } as Game;

@@ -36,6 +36,7 @@ ESPN is blocked from the dev environment, so these were tested only with stubbed
 - **The league split ("how you compare")** is only shown for games past kickoff, so it can't influence picks.
 - **Next.js look, not Next.js itself** (Oct 31): the site borrows the Geist/Vercel visual style (fonts, neutral palette, thin borders) but stays on Vite + Express. A Next.js migration would mean rewriting routing and data fetching, and it is unclear whether pplx.app can host a Next.js server. Revisit only in the off-season.
 - **Pick colors on This Week** (Oct 31): the picked team is green when won, red when lost, grey on a spread push and blue until decided (`pickResult` in `shared/outcome.ts`). Ungraded final scores use the unofficial result; in-progress games stay blue and the "winning/losing" text line shows the live state.
+- **Games are listed by kickoff time** (Nov 4): `listGamesByWeek` sorts by `kickoff`, then `sort_order` (ESPN import order). The money-game tiebreak between equally split games still uses `sort_order`, so it is unchanged.
 - **Header stays dark in light mode** so the iPhone home-screen status bar (`black-translucent`, white text) stays readable.
 - **Grading waits for the pick deadline** because money games are assigned when picks lock.
 
