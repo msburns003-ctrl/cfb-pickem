@@ -1,6 +1,6 @@
 // In-memory stand-in for server/storage.ts so tests never touch Supabase.
 // Tests mock "../server/storage" with `fake` and fill `db` directly.
-import type { Game, Pick, UpsetPick, User, Week } from "@shared/schema";
+import type { CristoBallEntry, CristoBallResults, Game, Pick, UpsetPick, User, Week } from "@shared/schema";
 
 export const db = {
   users: [] as User[],
@@ -8,6 +8,8 @@ export const db = {
   games: [] as Game[],
   picks: [] as Pick[],
   upsets: [] as UpsetPick[],
+  cristoBallResults: undefined as CristoBallResults | undefined,
+  cristoBallEntries: [] as CristoBallEntry[],
 };
 
 let nextId = 1000;
@@ -18,6 +20,8 @@ export function resetDb() {
   db.games = [];
   db.picks = [];
   db.upsets = [];
+  db.cristoBallResults = undefined;
+  db.cristoBallEntries = [];
 }
 
 function update<T extends { id: number }>(rows: T[], id: number, fields: Partial<T>): T | undefined {
@@ -78,11 +82,49 @@ export const fake = {
     updates.forEach(({ id, ...f }) => update(db.upsets, id, f));
   },
 
-  getCristoBallResults: async () => undefined,
-  listCristoBallEntries: async () => [],
+  getCristoBallResults: async () => (db.cristoBallResults ? { ...db.cristoBallResults } : undefined),
+  listCristoBallEntries: async () => db.cristoBallEntries.map((e) => ({ ...e })),
 };
 
-// Builders with sensible defaults.
+// Builders with sensible Cristo-Ball defaults.
+export function cristoBallResults(fields: Partial<CristoBallResults> & { seasonYear: number }): CristoBallResults {
+  const r: CristoBallResults = {
+    id: nextId++,
+    actualPicks: {},
+    actualSeasonAnswers: {},
+    actualChoicePicks: {},
+    actualWinTotals: {},
+    actualNationalChamp: null,
+    actualPlayoffTeams: [],
+    actualHeisman: null,
+    gradedAt: null,
+    lockDeadline: null,
+    ...fields,
+  };
+  db.cristoBallResults = r;
+  return r;
+}
+
+export function cristoBallEntry(fields: Partial<CristoBallEntry> & { id: number; userId: number }): CristoBallEntry {
+  const e: CristoBallEntry = {
+    seasonYear: 2026,
+    picks: {},
+    seasonAnswers: {},
+    choicePicks: {},
+    winTotalPicks: {},
+    nationalChampPick: null,
+    playoffPicks: [],
+    heismanPick: null,
+    pointsEarned: null,
+    pointsBreakdown: null,
+    submittedAt: "2026-08-28T16:00:00.000Z",
+    updatedAt: "2026-08-28T16:00:00.000Z",
+    ...fields,
+  };
+  db.cristoBallEntries.push(e);
+  return e;
+}
+
 export function week(fields: Partial<Week> & { id: number }): Week {
   const w: Week = {
     seasonYear: 2026,

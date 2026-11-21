@@ -14,6 +14,7 @@ interface StandingsRow {
   name: string;
   weeklyPoints: Record<number, number>;
   cristoBallPoints: number | null;
+  cristoBallLivePoints?: number | null;
   totalPoints: number;
   rank: number;
   previousRank: number | null;
@@ -58,6 +59,9 @@ interface StandingsResponse {
   weeks: Week[];
   // Picks locked but not fully graded yet; its points so far are in totals.
   currentWeek: Week | null;
+  // How many Cristo-Ball questions have actual results entered so far.
+  // Present once the admin starts entering actuals.
+  cristoBall?: { decided: number; total: number } | null;
 }
 
 function rankBadgeClass(rank: number) {
@@ -100,6 +104,12 @@ export default function StandingsPage() {
     );
   }
 
+  // Cristo-Ball live mode: the admin has started entering actual results but
+  // hasn't run the final grade yet. The Cristo-Ball column then shows each
+  // member's earned-so-far points — display-only, never in the Total column.
+  const cristoBallLive =
+    !!data.cristoBall && data.cristoBall.decided > 0 && data.rows.every((r) => r.cristoBallPoints == null);
+
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -137,7 +147,21 @@ export default function StandingsPage() {
                   <div className="text-[10px] font-normal normal-case text-accent">in progress</div>
                 </th>
               )}
-              <th className="px-3 py-2 text-center font-medium whitespace-nowrap">Cristo-Ball</th>
+              <th
+                className="px-3 py-2 text-center font-medium whitespace-nowrap"
+                title={
+                  cristoBallLive
+                    ? "Cristo-Ball points earned from actual results entered so far. Display-only — not counted in Total until the final grade."
+                    : "Season-long Cristo-Ball points, added to Total once the final grade is run"
+                }
+              >
+                Cristo-Ball
+                {cristoBallLive && (
+                  <div className="text-[10px] font-normal normal-case text-accent">
+                    {data.cristoBall!.decided} of {data.cristoBall!.total} decided
+                  </div>
+                )}
+              </th>
               <th className={cn(STICKY_TOTAL, "bg-muted px-3 py-2 text-right font-medium")}>Total</th>
             </tr>
           </thead>
@@ -177,7 +201,17 @@ export default function StandingsPage() {
                     {row.weeklyPoints[data.currentWeek.id] ?? 0}
                   </td>
                 )}
-                <td className="px-3 py-2 text-center text-muted-foreground">{row.cristoBallPoints ?? "–"}</td>
+                <td
+                  className="px-3 py-2 text-center text-muted-foreground"
+                  title={
+                    cristoBallLive && row.cristoBallPoints == null && row.cristoBallLivePoints != null
+                      ? "Earned so far from actuals entered — display-only, not in Total until the final grade"
+                      : undefined
+                  }
+                >
+                  {row.cristoBallPoints ??
+                    (cristoBallLive && row.cristoBallLivePoints != null ? row.cristoBallLivePoints : "–")}
+                </td>
                 <td className={cn(STICKY_TOTAL, stickyBg, "px-3 py-2 text-right font-display font-semibold")}>
                   {row.totalPoints}
                 </td>
