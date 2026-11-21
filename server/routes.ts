@@ -447,6 +447,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const parsed = insertCristoBallResultsSchema.safeParse({ ...req.body, seasonYear });
     if (!parsed.success) return res.status(400).json({ message: "Invalid Cristo-Ball results" });
     const results = await storage.upsertCristoBallResults(parsed.data);
+    // Saved results count toward standings right away (as points so far).
+    invalidate(prefixes.standings);
     res.json({ results });
   });
 
@@ -475,6 +477,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       await storage.updateCristoBallEntry(entry.id, { pointsEarned: total, pointsBreakdown: breakdown });
     }
     const graded = await storage.markCristoBallGraded(seasonYear, new Date().toISOString());
+    invalidate(prefixes.standings);
     res.json({ results: graded, gradedCount: entries.length });
   });
 

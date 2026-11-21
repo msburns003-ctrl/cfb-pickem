@@ -37,6 +37,7 @@ ESPN is blocked from the dev environment, so these were tested only with stubbed
 - **Next.js look, not Next.js itself** (Oct 31): the site borrows the Geist/Vercel visual style (fonts, neutral palette, thin borders) but stays on Vite + Express. A Next.js migration would mean rewriting routing and data fetching, and it is unclear whether pplx.app can host a Next.js server. Revisit only in the off-season.
 - **Pick colors on This Week** (Oct 31): the picked team is green when won, red when lost, grey on a spread push and blue until decided (`pickResult` in `shared/outcome.ts`). Ungraded final scores use the unofficial result; in-progress games stay blue and the "winning/losing" text line shows the live state.
 - **Games are listed by kickoff time** (Nov 4): `listGamesByWeek` sorts by `kickoff`, then `sort_order` (ESPN import order). The money-game tiebreak between equally split games still uses `sort_order`, so it is unchanged.
+- **Cristo-Ball counts toward season totals before grading** (Nov 21, requested by the commissioner): standings score each entry against the results saved so far on the Cristo-Ball admin page (unsettled answers count 0) and add it to totals and ranks; the column says "so far" until Cristo-Ball is graded, then uses the graded points. Admins should save results as answers are settled.
 - **Header stays dark in light mode** so the iPhone home-screen status bar (`black-translucent`, white text) stays readable.
 - **Grading waits for the pick deadline** because money games are assigned when picks lock.
 

@@ -1,6 +1,6 @@
 // In-memory stand-in for server/storage.ts so tests never touch Supabase.
 // Tests mock "../server/storage" with `fake` and fill `db` directly.
-import type { Game, Pick, UpsetPick, User, Week } from "@shared/schema";
+import type { CristoBallEntry, CristoBallResults, Game, Pick, UpsetPick, User, Week } from "@shared/schema";
 
 export const db = {
   users: [] as User[],
@@ -8,6 +8,8 @@ export const db = {
   games: [] as Game[],
   picks: [] as Pick[],
   upsets: [] as UpsetPick[],
+  cristoEntries: [] as CristoBallEntry[],
+  cristoResults: undefined as CristoBallResults | undefined,
 };
 
 let nextId = 1000;
@@ -18,6 +20,8 @@ export function resetDb() {
   db.games = [];
   db.picks = [];
   db.upsets = [];
+  db.cristoEntries = [];
+  db.cristoResults = undefined;
 }
 
 function update<T extends { id: number }>(rows: T[], id: number, fields: Partial<T>): T | undefined {
@@ -78,8 +82,8 @@ export const fake = {
     updates.forEach(({ id, ...f }) => update(db.upsets, id, f));
   },
 
-  getCristoBallResults: async () => undefined,
-  listCristoBallEntries: async () => [],
+  getCristoBallResults: async () => db.cristoResults,
+  listCristoBallEntries: async () => db.cristoEntries.map((e) => ({ ...e })),
 };
 
 // Builders with sensible defaults.

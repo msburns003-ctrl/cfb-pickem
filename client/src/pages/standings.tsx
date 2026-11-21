@@ -14,6 +14,7 @@ interface StandingsRow {
   name: string;
   weeklyPoints: Record<number, number>;
   cristoBallPoints: number | null;
+  cristoBallFinal: boolean;
   totalPoints: number;
   rank: number;
   previousRank: number | null;
@@ -100,6 +101,11 @@ export default function StandingsPage() {
     );
   }
 
+  // Before Cristo-Ball is graded, its column (and totals) use the results
+  // saved so far; say so once any results exist.
+  const cristoBallFinal = data.rows[0]?.cristoBallFinal ?? false;
+  const cristoBallSoFar = !cristoBallFinal && data.rows.some((r) => r.cristoBallPoints != null);
+
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -137,7 +143,13 @@ export default function StandingsPage() {
                   <div className="text-[10px] font-normal normal-case text-accent">in progress</div>
                 </th>
               )}
-              <th className="px-3 py-2 text-center font-medium whitespace-nowrap">Cristo-Ball</th>
+              <th
+                className="px-3 py-2 text-center font-medium whitespace-nowrap"
+                title={cristoBallFinal ? "Final Cristo-Ball points" : "Cristo-Ball points so far, from results settled to date; unsettled picks count 0"}
+              >
+                Cristo-Ball
+                {cristoBallSoFar && <div className="text-[10px] font-normal normal-case text-muted-foreground">so far</div>}
+              </th>
               <th className={cn(STICKY_TOTAL, "bg-muted px-3 py-2 text-right font-medium")}>Total</th>
             </tr>
           </thead>

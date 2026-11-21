@@ -215,7 +215,8 @@ export interface StandingsRow {
   userId: number;
   name: string;
   weeklyPoints: Record<number, number>; // weekId -> points
-  cristoBallPoints: number | null; // null = not graded yet
+  cristoBallPoints: number | null; // null = no Cristo-Ball results entered yet
+  cristoBallFinal: boolean; // false = points so far, from results saved before grading
   totalPoints: number;
   rank: number;
   previousRank: number | null; // rank as of the prior graded week; null if not enough graded weeks yet
@@ -340,13 +341,14 @@ export function gradeCristoBallEntry(
 
 /**
  * Computes season standings. By default, across all graded weeks, plus
- * Cristo-Ball points once Cristo-Ball has been graded. Ties share the same
+ * Cristo-Ball points: the graded points once Cristo-Ball has been graded, and
+ * before that the points earned so far against whatever results an admin has
+ * saved (unsettled answers score 0). Ties share the same
  * rank (no tiebreaker), matching the league's historical convention.
  *
  * When `weekIdsFilter` is provided, only picks/upset picks from those weeks
  * are accumulated (used to reconstruct "standings as of a prior week" for
- * rank-change comparisons); Cristo-Ball points are always included once
- * graded, since Cristo-Ball is a single season-long lump sum rather than a
+ * rank-change comparisons); Cristo-Ball points are always included, since Cristo-Ball is a single season-long lump sum rather than a
  * per-week component.
  */
 export async function computeStandings(weekIdsFilter?: number[]): Promise<StandingsRow[]> {
@@ -355,7 +357,7 @@ export async function computeStandings(weekIdsFilter?: number[]): Promise<Standi
   const seasonYear = await getCurrentSeasonYear();
   const cristoBallResults = await storage.getCristoBallResults(seasonYear);
   const cristoBallGraded = !!cristoBallResults?.gradedAt;
-  const cristoBallEntries = cristoBallGraded ? await storage.listCristoBallEntries(seasonYear) : [];
+  const cristoBallEntries = cristoBallResults ? await storage.listCristoBallEntries(seasonYear) : [];
   const cristoBallByUser = new Map(cristoBallEntries.map((e) => [e.userId, e]));
 
   const totals = new Map<
@@ -363,7 +365,14 @@ export async function computeStandings(weekIdsFilter?: number[]): Promise<Standi
     { name: string; weeklyPoints: Record<number, number>; cristoBallPoints: number | null; total: number }
   >();
   for (const u of allUsers) {
-    const cristoBallPoints = cristoBallGraded ? cristoBallByUser.get(u.id)?.pointsEarned ?? 0 : null;
+    const entry = cristoBallByUser.get(u.id);
+    const cristoBallPoints = !cristoBallResults
+      ? null
+      : !entry
+        ? 0
+        : cristoBallGraded
+          ? entry.pointsEarned ?? 0
+          : gradeCristoBallEntry(entry, cristoBallResults).total;
     totals.set(u.id, { name: u.name, weeklyPoints: {}, cristoBallPoints, total: cristoBallPoints ?? 0 });
   }
 
@@ -390,6 +399,7 @@ export async function computeStandings(weekIdsFilter?: number[]): Promise<Standi
     name: v.name,
     weeklyPoints: v.weeklyPoints,
     cristoBallPoints: v.cristoBallPoints,
+    cristoBallFinal: cristoBallGraded,
     totalPoints: v.total,
     rank: 0,
     previousRank: null,

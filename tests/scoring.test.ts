@@ -128,3 +128,46 @@ describe("assignMoneyGames", () => {
     expect(money).toEqual([21]);
   });
 });
+
+describe("computeStandings with Cristo-Ball", () => {
+  const entry = (userId: number, sec: string, pointsEarned: number | null = null) => ({
+    id: userId, userId, seasonYear: 2026, picks: { sec }, seasonAnswers: {}, choicePicks: {}, winTotalPicks: {},
+    nationalChampPick: null, playoffPicks: [], heismanPick: null, pointsEarned, pointsBreakdown: null,
+    submittedAt: "2026-08-01T00:00:00.000Z", updatedAt: "2026-08-01T00:00:00.000Z",
+  });
+  const results = (gradedAt: string | null) => ({
+    id: 1, seasonYear: 2026, actualPicks: { sec: "Georgia" }, actualSeasonAnswers: {}, actualChoicePicks: {}, actualWinTotals: {},
+    actualNationalChamp: null, actualPlayoffTeams: [], actualHeisman: null, gradedAt, lockDeadline: null,
+  });
+  function setup() {
+    user({ id: 1, name: "Ann" });
+    user({ id: 2, name: "Bob" });
+    week({ id: 1, status: "graded" });
+    game({ id: 10, weekId: 1, awayTeam: "A", homeTeam: "B", favoriteTeam: "A", spread: 3, status: "final", awayScore: 20, homeScore: 10, atsResult: "favorite" });
+    pick({ id: 1, gameId: 10, userId: 2, selectedTeam: "A", isCorrect: true, pointsEarned: 1 });
+    db.cristoEntries = [entry(1, "Georgia"), entry(2, "Texas")];
+  }
+
+  it("shows no Cristo-Ball points before any results are saved", async () => {
+    setup();
+    const rows = await computeStandings();
+    expect(rows.map((r) => [r.name, r.cristoBallPoints, r.totalPoints])).toEqual([["Bob", null, 1], ["Ann", null, 0]]);
+  });
+
+  it("adds points so far from saved results into the total before grading", async () => {
+    setup();
+    db.cristoResults = results(null);
+    const rows = await computeStandings();
+    const ann = rows.find((r) => r.name === "Ann")!;
+    expect(ann).toMatchObject({ cristoBallPoints: 3, cristoBallFinal: false, totalPoints: 3, rank: 1 });
+    expect(rows.find((r) => r.name === "Bob")).toMatchObject({ cristoBallPoints: 0, totalPoints: 1, rank: 2 });
+  });
+
+  it("uses the graded points once Cristo-Ball is graded", async () => {
+    setup();
+    db.cristoResults = results("2026-12-10T00:00:00.000Z");
+    db.cristoEntries = [entry(1, "Georgia", 7), entry(2, "Texas", 0)];
+    const ann = (await computeStandings()).find((r) => r.name === "Ann")!;
+    expect(ann).toMatchObject({ cristoBallPoints: 7, cristoBallFinal: true, totalPoints: 7 });
+  });
+});
