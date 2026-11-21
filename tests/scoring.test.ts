@@ -112,7 +112,7 @@ describe("standings and season stats", () => {
   });
 });
 
-describe("live Cristo-Ball points in standings (display-only)", () => {
+describe("live Cristo-Ball points in standings", () => {
   function setup() {
     ["Ann", "Bob", "Cat"].forEach((name, i) => user({ id: i + 1, name }));
     week({ id: 1, status: "graded" });
@@ -121,7 +121,7 @@ describe("live Cristo-Ball points in standings (display-only)", () => {
     cristoBallEntry({ id: 2, userId: 2, picks: { sec: "Texas" }, seasonAnswers: { power4CoachFired: false }, winTotalPicks: { oklahoma: "over" } });
   }
 
-  it("grades entries against partial actuals without affecting totals", async () => {
+  it("grades entries against partial actuals and counts them in totals", async () => {
     setup();
     cristoBallResults({
       seasonYear: 2026,
@@ -144,9 +144,11 @@ describe("live Cristo-Ball points in standings (display-only)", () => {
     expect(bob.cristoBallLivePoints).toBe(0);
     // Cat has no entry, so no live points at all.
     expect(cat.cristoBallLivePoints).toBeNull();
-    // Display-only: nobody's official total includes live Cristo-Ball points.
-    expect(ann.totalPoints).toBe(0);
+    // Live points count in totals (and ranks) before the final grade.
+    expect(ann.totalPoints).toBe(5);
     expect(bob.totalPoints).toBe(0);
+    expect(cat.totalPoints).toBe(0);
+    expect(ann.rank).toBe(1);
   });
 
   it("shows no live points before any actuals are entered", async () => {

@@ -217,7 +217,7 @@ export interface StandingsRow {
   name: string;
   weeklyPoints: Record<number, number>; // weekId -> points
   cristoBallPoints: number | null; // null = not graded yet (official, counts in total)
-  cristoBallLivePoints: number | null; // earned vs actuals entered so far; null = no actuals yet. Display-only: never added to totalPoints.
+  cristoBallLivePoints: number | null; // earned vs actuals entered so far; null = no actuals yet. Counts in totalPoints until the final grade.
   totalPoints: number;
   rank: number;
   previousRank: number | null; // rank as of the prior graded week; null if not enough graded weeks yet
@@ -375,13 +375,13 @@ export function gradeCristoBallEntry(
 
 /**
  * Computes season standings. By default, across all graded weeks, plus
- * Cristo-Ball points once Cristo-Ball has been graded. Ties share the same
+ * Cristo-Ball points: earned so far against the actuals entered until the
+ * final grade, then the official graded points. Ties share the same
  * rank (no tiebreaker), matching the league's historical convention.
  *
  * When `weekIdsFilter` is provided, only picks/upset picks from those weeks
  * are accumulated (used to reconstruct "standings as of a prior week" for
- * rank-change comparisons); Cristo-Ball points are always included once
- * graded, since Cristo-Ball is a single season-long lump sum rather than a
+ * rank-change comparisons); Cristo-Ball points are always included, since Cristo-Ball is a single season-long lump sum rather than a
  * per-week component.
  */
 export async function computeStandings(weekIdsFilter?: number[]): Promise<StandingsRow[]> {
@@ -391,9 +391,9 @@ export async function computeStandings(weekIdsFilter?: number[]): Promise<Standi
   const cristoBallResults = await storage.getCristoBallResults(seasonYear);
   const cristoBallGraded = !!cristoBallResults?.gradedAt;
   // Live Cristo-Ball points: once any actual results have been entered, every
-  // entry is graded against them on the fly. Display-only — these points are
-  // NOT added to totalPoints; the official lump sum only lands when the admin
-  // runs the final grade (gradedAt set).
+  // entry is graded against them on the fly and counted in totalPoints (and so
+  // in ranks). Once the admin runs the final grade (gradedAt set), the stored
+  // official points replace them.
   const hasCristoBallActuals = cristoBallResults ? cristoBallProgress(cristoBallResults).decided > 0 : false;
   const cristoBallEntries = cristoBallResults ? await storage.listCristoBallEntries(seasonYear) : [];
   const cristoBallByUser = new Map(cristoBallEntries.map((e) => [e.userId, e]));
@@ -411,7 +411,8 @@ export async function computeStandings(weekIdsFilter?: number[]): Promise<Standi
   for (const u of allUsers) {
     const cristoBallPoints = cristoBallGraded ? cristoBallByUser.get(u.id)?.pointsEarned ?? 0 : null;
     const cristoBallLivePoints = cristoBallLiveByUser.get(u.id) ?? null;
-    totals.set(u.id, { name: u.name, weeklyPoints: {}, cristoBallPoints, cristoBallLivePoints, total: cristoBallPoints ?? 0 });
+    const total = cristoBallPoints ?? cristoBallLivePoints ?? 0;
+    totals.set(u.id, { name: u.name, weeklyPoints: {}, cristoBallPoints, cristoBallLivePoints, total });
   }
 
   for (const week of allWeeks) {

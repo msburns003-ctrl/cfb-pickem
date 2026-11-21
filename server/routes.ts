@@ -339,7 +339,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const rows = await computeStandings();
       const weeks = await storage.listWeeks();
       // Live Cristo-Ball progress: how many questions have actuals entered so
-      // far. Rows carry cristoBallLivePoints (earned so far, display-only).
+      // far. Rows carry cristoBallLivePoints (earned so far, counted in totals).
       const cristoBallResults = await storage.getCristoBallResults(await getCurrentSeasonYear());
       const cristoBall = cristoBallResults ? cristoBallProgress(cristoBallResults) : null;
       const gradedWeeks = weeks.filter((w) => w.status === "graded").sort((a, b) => a.weekNumber - b.weekNumber);
@@ -468,6 +468,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const parsed = insertCristoBallResultsSchema.safeParse({ ...req.body, seasonYear });
     if (!parsed.success) return res.status(400).json({ message: "Invalid Cristo-Ball results" });
     const results = await storage.upsertCristoBallResults(parsed.data);
+    // Saved actuals count toward standings totals right away.
+    invalidate(prefixes.standings);
     res.json({ results });
   });
 
@@ -496,6 +498,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       await storage.updateCristoBallEntry(entry.id, { pointsEarned: total, pointsBreakdown: breakdown });
     }
     const graded = await storage.markCristoBallGraded(seasonYear, new Date().toISOString());
+    invalidate(prefixes.standings);
     res.json({ results: graded, gradedCount: entries.length });
   });
 

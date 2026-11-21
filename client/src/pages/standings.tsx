@@ -106,7 +106,7 @@ export default function StandingsPage() {
 
   // Cristo-Ball live mode: the admin has started entering actual results but
   // hasn't run the final grade yet. The Cristo-Ball column then shows each
-  // member's earned-so-far points — display-only, never in the Total column.
+  // member's earned-so-far points, which also count in the Total column.
   const cristoBallLive =
     !!data.cristoBall && data.cristoBall.decided > 0 && data.rows.every((r) => r.cristoBallPoints == null);
 
@@ -151,7 +151,7 @@ export default function StandingsPage() {
                 className="px-3 py-2 text-center font-medium whitespace-nowrap"
                 title={
                   cristoBallLive
-                    ? "Cristo-Ball points earned from actual results entered so far. Display-only — not counted in Total until the final grade."
+                    ? "Cristo-Ball points earned from actual results entered so far, included in Total. Undecided questions count 0 until results are entered."
                     : "Season-long Cristo-Ball points, added to Total once the final grade is run"
                 }
               >
@@ -205,7 +205,7 @@ export default function StandingsPage() {
                   className="px-3 py-2 text-center text-muted-foreground"
                   title={
                     cristoBallLive && row.cristoBallPoints == null && row.cristoBallLivePoints != null
-                      ? "Earned so far from actuals entered — display-only, not in Total until the final grade"
+                      ? "Earned so far from actuals entered — included in Total"
                       : undefined
                   }
                 >
