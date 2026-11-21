@@ -14,6 +14,7 @@ import {
   getCurrentSeasonYear,
   getCristoBallLockDeadline,
   gradeCristoBallEntry,
+  cristoBallProgress,
 } from "./scoring";
 import { insertWeekSchema, type InsertWeek, insertCristoBallEntrySchema, insertCristoBallResultsSchema, insertCristoBallLockDeadlineSchema } from "@shared/schema";
 import { checkGamesForWeek, getLiveScoresForWeek } from "./scores";
@@ -337,6 +338,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const payload = await cached(keys.standings(), 30_000, async () => {
       const rows = await computeStandings();
       const weeks = await storage.listWeeks();
+      // Live Cristo-Ball progress: how many questions have actuals entered so
+      // far. Rows carry cristoBallLivePoints (earned so far, counted in totals).
+      const cristoBallResults = await storage.getCristoBallResults(await getCurrentSeasonYear());
+      const cristoBall = cristoBallResults ? cristoBallProgress(cristoBallResults) : null;
       const gradedWeeks = weeks.filter((w) => w.status === "graded").sort((a, b) => a.weekNumber - b.weekNumber);
 
       // Rank-change arrows compare the current standings to how they stood
@@ -358,7 +363,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           .filter((w) => w.status === "locked" || (w.status === "open" && now >= new Date(w.pickDeadline).getTime()))
           .sort((a, b) => b.weekNumber - a.weekNumber)[0] ?? null;
 
-      return { rows: rowsWithChange, weeks: gradedWeeks, currentWeek };
+      return { rows: rowsWithChange, weeks: gradedWeeks, currentWeek, cristoBall };
     });
     res.json(payload);
   });
@@ -374,12 +379,28 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // ---------------- CRISTO-BALL ----------------
   app.get("/api/cristoball/me", requireAuth, async (req, res) => {
     const seasonYear = await getCurrentSeasonYear();
-    const [entry, lockDeadline] = await Promise.all([
+    const [entry, lockDeadline, results] = await Promise.all([
       storage.getCristoBallEntry(req.user!.id, seasonYear),
       getCristoBallLockDeadline(seasonYear),
+      storage.getCristoBallResults(seasonYear),
     ]);
     const locked = lockDeadline != null && Date.now() >= new Date(lockDeadline).getTime();
-    res.json({ seasonYear, entry: entry ?? null, locked, lockDeadline });
+    // Once entries are locked, decided actuals are public sports facts — share
+    // them so members can see right/wrong per question as the season resolves.
+    // Never sent before the lock, since picks could still be edited.
+    const actuals =
+      locked && results
+        ? {
+            actualPicks: results.actualPicks,
+            actualSeasonAnswers: results.actualSeasonAnswers,
+            actualChoicePicks: results.actualChoicePicks,
+            actualWinTotals: results.actualWinTotals,
+            actualNationalChamp: results.actualNationalChamp,
+            actualPlayoffTeams: results.actualPlayoffTeams,
+            actualHeisman: results.actualHeisman,
+          }
+        : null;
+    res.json({ seasonYear, entry: entry ?? null, locked, lockDeadline, results: actuals });
   });
 
   app.post("/api/cristoball/me", requireAuth, async (req, res) => {
@@ -447,7 +468,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const parsed = insertCristoBallResultsSchema.safeParse({ ...req.body, seasonYear });
     if (!parsed.success) return res.status(400).json({ message: "Invalid Cristo-Ball results" });
     const results = await storage.upsertCristoBallResults(parsed.data);
-    // Saved results count toward standings right away (as points so far).
+    // Saved actuals count toward standings totals right away.
     invalidate(prefixes.standings);
     res.json({ results });
   });

@@ -11,7 +11,8 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { CountdownTimer } from "@/components/CountdownTimer";
 import { formatEastern } from "@/lib/time";
-import { Sparkles, Trophy } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { Check, Sparkles, Trophy, X } from "lucide-react";
 import {
   CRISTO_BALL_CATEGORIES,
   CRISTO_BALL_SEASON_QUESTIONS,
@@ -36,6 +37,43 @@ interface CristoBallMeResponse {
   entry: CristoBallEntry | null;
   locked: boolean;
   lockDeadline: string | null;
+  // Decided actual results, only sent once entries are locked.
+  results?: CristoBallActuals | null;
+}
+
+interface CristoBallActuals {
+  actualPicks: Record<string, string>;
+  actualSeasonAnswers: Record<string, boolean | null>;
+  actualChoicePicks: Record<string, string>;
+  actualWinTotals: Record<string, number | null>;
+  actualNationalChamp: string | null;
+  actualPlayoffTeams: string[];
+  actualHeisman: string | null;
+}
+
+type ResultStatus = "correct" | "wrong" | null;
+
+const norm = (s: string | null | undefined) => (s ?? "").trim().toLowerCase();
+
+function ResultBadge({ status, points, testId }: { status: ResultStatus; points: number; testId?: string }) {
+  if (!status) return null;
+  const correct = status === "correct";
+  return (
+    <Badge
+      variant="outline"
+      className={cn(
+        "shrink-0 gap-1 font-medium",
+        correct
+          ? "border-green-500/40 bg-green-500/10 text-green-600 dark:text-green-400"
+          : "border-red-500/40 bg-red-500/10 text-red-600 dark:text-red-400",
+      )}
+      data-testid={testId}
+      title={correct ? "Correct — points earned" : "Missed — no points"}
+    >
+      {correct ? <Check className="h-3 w-3" /> : <X className="h-3 w-3" />}
+      {correct ? `+${points}` : "+0"} pts
+    </Badge>
+  );
 }
 
 function emptyPlayoffPicks(existing?: string[]): string[] {
@@ -104,6 +142,77 @@ export default function CristoBallPage() {
   }
 
   const { locked, lockDeadline } = data;
+  const results = data.results ?? null;
+
+  // Per-question right/wrong against the actuals entered so far. Questions
+  // without an actual yet (and unanswered questions) stay unmarked.
+  const catStatus = (key: string): ResultStatus => {
+    const actual = results?.actualPicks?.[key];
+    if (!actual || !picks[key]) return null;
+    return norm(actual) === norm(picks[key]) ? "correct" : "wrong";
+  };
+  const seasonStatus = (key: string): ResultStatus => {
+    const actual = results?.actualSeasonAnswers?.[key];
+    if (actual !== true && actual !== false) return null;
+    const mine = seasonAnswers[key];
+    if (mine === undefined || mine === null) return null;
+    return mine === actual ? "correct" : "wrong";
+  };
+  const choiceStatus = (key: string): ResultStatus => {
+    const actual = results?.actualChoicePicks?.[key];
+    if (!actual || !choicePicks[key]) return null;
+    return norm(actual) === norm(choicePicks[key]) ? "correct" : "wrong";
+  };
+  const winTotalStatus = (key: string, line: number): ResultStatus => {
+    const actualWins = results?.actualWinTotals?.[key];
+    if (actualWins === null || actualWins === undefined || !winTotalPicks[key]) return null;
+    return winTotalPicks[key] === (actualWins > line ? "over" : "under") ? "correct" : "wrong";
+  };
+  const nationalChampStatus = (): ResultStatus => {
+    const actual = results?.actualNationalChamp;
+    if (!actual || !nationalChampPick.trim()) return null;
+    return norm(actual) === norm(nationalChampPick) ? "correct" : "wrong";
+  };
+  const playoffStatus = (team: string): ResultStatus => {
+    if (!team.trim() || !results) return null;
+    const actualSet = new Set((results.actualPlayoffTeams ?? []).map(norm).filter(Boolean));
+    if (actualSet.size === 0) return null;
+    if (actualSet.has(norm(team))) return "correct";
+    // Only mark a miss once the full four-team field is entered — a team not
+    // yet listed could still be added.
+    return actualSet.size >= CRISTO_BALL_PLAYOFF_TEAM_COUNT ? "wrong" : null;
+  };
+  const heismanStatus = (): ResultStatus => {
+    const actual = results?.actualHeisman;
+    if (!actual || !heismanPick.trim()) return null;
+    return norm(actual) === norm(heismanPick) ? "correct" : "wrong";
+  };
+
+  // How many questions are decided so far, and the points already earned
+  // against them (matches the league's grading rules).
+  const decidedCount =
+    CRISTO_BALL_CATEGORIES.filter((c) => !!results?.actualPicks?.[c.key]).length +
+    CRISTO_BALL_SEASON_QUESTIONS.filter((q) => {
+      const a = results?.actualSeasonAnswers?.[q.key];
+      return a === true || a === false;
+    }).length +
+    CRISTO_BALL_CHOICE_QUESTIONS.filter((q) => !!results?.actualChoicePicks?.[q.key]).length +
+    CRISTO_BALL_WIN_TOTALS.filter((w) => {
+      const a = results?.actualWinTotals?.[w.key];
+      return a !== null && a !== undefined;
+    }).length +
+    (results?.actualNationalChamp ? 1 : 0) +
+    (results?.actualPlayoffTeams ?? []).filter((t) => t && t.trim()).length +
+    (results?.actualHeisman ? 1 : 0);
+
+  const liveEarned =
+    CRISTO_BALL_CATEGORIES.filter((c) => catStatus(c.key) === "correct").reduce((sum, c) => sum + c.points, 0) +
+    CRISTO_BALL_SEASON_QUESTIONS.filter((q) => seasonStatus(q.key) === "correct").reduce((sum, q) => sum + q.points, 0) +
+    CRISTO_BALL_CHOICE_QUESTIONS.filter((q) => choiceStatus(q.key) === "correct").reduce((sum, q) => sum + q.points, 0) +
+    CRISTO_BALL_WIN_TOTALS.filter((w) => winTotalStatus(w.key, w.line) === "correct").reduce((sum, w) => sum + w.points, 0) +
+    (nationalChampStatus() === "correct" ? CRISTO_BALL_NATIONAL_CHAMP_POINTS : 0) +
+    playoffPicks.filter((t) => playoffStatus(t) === "correct").length * CRISTO_BALL_PLAYOFF_TEAM_POINTS +
+    (heismanStatus() === "correct" ? CRISTO_BALL_HEISMAN_POINTS : 0);
   const filledCount =
     CRISTO_BALL_CATEGORIES.filter((c) => !!picks[c.key]).length +
     CRISTO_BALL_SEASON_QUESTIONS.filter((q) => seasonAnswers[q.key] !== undefined && seasonAnswers[q.key] !== null).length +
@@ -144,8 +253,27 @@ export default function CristoBallPage() {
 
       {locked && (
         <p className="rounded-md bg-muted px-3 py-2 text-sm text-muted-foreground" data-testid="text-cristoball-locked">
-          Cristo-Ball picks are locked for the season. Scoring happens once every category is decided at year's end.
+          Cristo-Ball picks are locked for the season. Questions light up green or red as they're decided during the
+          year — your official score is finalized at year's end.
         </p>
+      )}
+
+      {locked && results && decidedCount > 0 && data.entry?.pointsEarned == null && (
+        <Card data-testid="card-cristoball-live-score">
+          <CardContent className="flex flex-wrap items-center justify-between gap-2 py-4">
+            <span className="flex items-center gap-2 font-medium">
+              <Trophy className="h-4 w-4 text-accent" /> Your Cristo-Ball score so far
+            </span>
+            <span className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">
+                {decidedCount} of {totalFields} questions decided
+              </span>
+              <Badge className="bg-accent text-accent-foreground text-base px-3 py-1" data-testid="badge-cristoball-live-score">
+                {ptsLabel(liveEarned)}
+              </Badge>
+            </span>
+          </CardContent>
+        </Card>
       )}
 
       {data.entry?.pointsEarned != null && (
@@ -165,9 +293,12 @@ export default function CristoBallPage() {
         {CRISTO_BALL_CATEGORIES.map((cat) => (
           <Card key={cat.key}>
             <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center justify-between">
+              <CardTitle className="text-base flex items-center justify-between gap-2">
                 <span>{cat.label}</span>
-                <Badge variant="outline">{ptsLabel(cat.points)}</Badge>
+                <span className="flex shrink-0 items-center gap-2">
+                  <ResultBadge status={catStatus(cat.key)} points={cat.points} testId={`badge-result-${cat.key}`} />
+                  <Badge variant="outline">{ptsLabel(cat.points)}</Badge>
+                </span>
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -203,12 +334,14 @@ export default function CristoBallPage() {
           {CRISTO_BALL_SEASON_QUESTIONS.map((q) => (
             <div key={q.key} className="flex flex-col gap-2 border-b border-border pb-3 last:border-0 last:pb-0 sm:flex-row sm:items-center sm:justify-between">
               <span className="text-sm">{q.label}</span>
-              <RadioGroup
-                value={seasonAnswers[q.key] === true ? "yes" : seasonAnswers[q.key] === false ? "no" : ""}
-                onValueChange={(v) => setSeasonAnswers((prev) => ({ ...prev, [q.key]: v === "yes" }))}
-                disabled={locked}
-                className="flex gap-4 shrink-0"
-              >
+              <span className="flex shrink-0 items-center gap-3">
+                <ResultBadge status={seasonStatus(q.key)} points={q.points} testId={`badge-result-${q.key}`} />
+                <RadioGroup
+                  value={seasonAnswers[q.key] === true ? "yes" : seasonAnswers[q.key] === false ? "no" : ""}
+                  onValueChange={(v) => setSeasonAnswers((prev) => ({ ...prev, [q.key]: v === "yes" }))}
+                  disabled={locked}
+                  className="flex gap-4"
+                >
                 <div className="flex items-center gap-1.5">
                   <RadioGroupItem value="yes" id={`${q.key}-yes`} data-testid={`radio-${q.key}-yes`} />
                   <Label htmlFor={`${q.key}-yes`} className="text-sm font-normal cursor-pointer">
@@ -221,7 +354,8 @@ export default function CristoBallPage() {
                     No
                   </Label>
                 </div>
-              </RadioGroup>
+                </RadioGroup>
+              </span>
             </div>
           ))}
         </CardContent>
@@ -231,9 +365,12 @@ export default function CristoBallPage() {
         {CRISTO_BALL_CHOICE_QUESTIONS.map((q) => (
           <Card key={q.key}>
             <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center justify-between">
+              <CardTitle className="text-base flex items-center justify-between gap-2">
                 <span>{q.label}</span>
-                <Badge variant="outline">{ptsLabel(q.points)}</Badge>
+                <span className="flex shrink-0 items-center gap-2">
+                  <ResultBadge status={choiceStatus(q.key)} points={q.points} testId={`badge-result-${q.key}`} />
+                  <Badge variant="outline">{ptsLabel(q.points)}</Badge>
+                </span>
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -271,25 +408,28 @@ export default function CristoBallPage() {
               <span className="text-sm">
                 {w.team} <span className="text-muted-foreground">{w.line} wins</span>
               </span>
-              <RadioGroup
-                value={winTotalPicks[w.key] ?? ""}
-                onValueChange={(v) => setWinTotalPicks((prev) => ({ ...prev, [w.key]: v as "over" | "under" }))}
-                disabled={locked}
-                className="flex gap-4 shrink-0"
-              >
-                <div className="flex items-center gap-1.5">
-                  <RadioGroupItem value="over" id={`${w.key}-over`} data-testid={`radio-${w.key}-over`} />
-                  <Label htmlFor={`${w.key}-over`} className="text-sm font-normal cursor-pointer">
-                    Over
-                  </Label>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <RadioGroupItem value="under" id={`${w.key}-under`} data-testid={`radio-${w.key}-under`} />
-                  <Label htmlFor={`${w.key}-under`} className="text-sm font-normal cursor-pointer">
-                    Under
-                  </Label>
-                </div>
-              </RadioGroup>
+              <span className="flex shrink-0 items-center gap-3">
+                <ResultBadge status={winTotalStatus(w.key, w.line)} points={w.points} testId={`badge-result-${w.key}`} />
+                <RadioGroup
+                  value={winTotalPicks[w.key] ?? ""}
+                  onValueChange={(v) => setWinTotalPicks((prev) => ({ ...prev, [w.key]: v as "over" | "under" }))}
+                  disabled={locked}
+                  className="flex gap-4"
+                >
+                  <div className="flex items-center gap-1.5">
+                    <RadioGroupItem value="over" id={`${w.key}-over`} data-testid={`radio-${w.key}-over`} />
+                    <Label htmlFor={`${w.key}-over`} className="text-sm font-normal cursor-pointer">
+                      Over
+                    </Label>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <RadioGroupItem value="under" id={`${w.key}-under`} data-testid={`radio-${w.key}-under`} />
+                    <Label htmlFor={`${w.key}-under`} className="text-sm font-normal cursor-pointer">
+                      Under
+                    </Label>
+                  </div>
+                </RadioGroup>
+              </span>
             </div>
           ))}
         </CardContent>
@@ -297,9 +437,12 @@ export default function CristoBallPage() {
 
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center justify-between">
+          <CardTitle className="text-base flex items-center justify-between gap-2">
             <span>2026 National Champion</span>
-            <Badge variant="outline">{ptsLabel(CRISTO_BALL_NATIONAL_CHAMP_POINTS)}</Badge>
+            <span className="flex shrink-0 items-center gap-2">
+              <ResultBadge status={nationalChampStatus()} points={CRISTO_BALL_NATIONAL_CHAMP_POINTS} testId="badge-result-national-champ" />
+              <Badge variant="outline">{ptsLabel(CRISTO_BALL_NATIONAL_CHAMP_POINTS)}</Badge>
+            </span>
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -334,6 +477,7 @@ export default function CristoBallPage() {
                 placeholder="Team name"
                 data-testid={`input-playoff-${i + 1}`}
               />
+              <ResultBadge status={playoffStatus(val)} points={CRISTO_BALL_PLAYOFF_TEAM_POINTS} testId={`badge-result-playoff-${i + 1}`} />
             </div>
           ))}
         </CardContent>
@@ -341,9 +485,12 @@ export default function CristoBallPage() {
 
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center justify-between">
+          <CardTitle className="text-base flex items-center justify-between gap-2">
             <span>2026 Heisman Trophy Winner</span>
-            <Badge variant="outline">{ptsLabel(CRISTO_BALL_HEISMAN_POINTS)}</Badge>
+            <span className="flex shrink-0 items-center gap-2">
+              <ResultBadge status={heismanStatus()} points={CRISTO_BALL_HEISMAN_POINTS} testId="badge-result-heisman" />
+              <Badge variant="outline">{ptsLabel(CRISTO_BALL_HEISMAN_POINTS)}</Badge>
+            </span>
           </CardTitle>
         </CardHeader>
         <CardContent>

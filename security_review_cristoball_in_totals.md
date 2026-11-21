@@ -1,26 +1,26 @@
-# Pre-Publish Security Review — Cristo-Ball Points in Season Totals
+# Pre-Publish Security Review — Cristo-Ball Live Points in Season Totals
 
-**Scope:** Branch `claude/cristoball-projected`. Season standings now count Cristo-Ball points before season-end grading, from the results an admin has saved so far. Files touched: `server/scoring.ts` (`computeStandings`), `server/routes.ts` (cache invalidation on Cristo-Ball results save and grade), `client/src/pages/standings.tsx` ("so far" label), `tests/fake-storage.ts`, `tests/scoring.test.ts`. No schema, auth or dependency changes.
+**Scope:** Branch `claude/cristoball-projected`, built on pull request #27 (live Cristo-Ball points, display-only; see `security_review_cristo_ball_live_results.md`). This change makes those live points count in season totals and ranks. Files touched: `server/scoring.ts` (`computeStandings` total), `server/routes.ts` (standings cache cleared when Cristo-Ball results are saved or graded), `client/src/pages/standings.tsx` and `client/src/pages/admin/cristoball.tsx` (wording; standings refresh after saving results), `tests/scoring.test.ts`. No schema, auth or dependency changes.
 
 ## What changed
 
-- Before: the Cristo-Ball column showed "–" and added nothing to totals until an admin pressed **Grade Cristo-Ball**.
-- Now: as soon as any Cristo-Ball results are saved on the admin page, each member's entry is scored against them with the existing `gradeCristoBallEntry` and added to their season total and rank. Picks whose answers aren't saved yet score 0. Members with no entry get 0.
-- Once Cristo-Ball is graded, the stored graded points are used, exactly as before.
-- The column header says "so far" until grading. The totals also flow into ranks, rank-change arrows (applied equally to current and prior standings, so arrows still reflect weekly movement), My stats and the This Week season summary. Weekly winners are unaffected.
-- Saving Cristo-Ball results or grading now clears the 30-second standings cache, so totals update at once.
+- Before: live Cristo-Ball points (earned so far against the actuals an admin has entered) showed in the Cristo-Ball column but were left out of Total until the final grade.
+- Now: until the final grade, each member's Total and rank include their live Cristo-Ball points. After the final grade, the stored official points are used, as before. Members with no entry, and undecided questions, count 0.
+- Rank-change arrows compare current and prior standings with the same Cristo-Ball points on both sides, so they still reflect weekly movement.
+- Saving actual results or grading clears the 30-second standings cache, and the admin page refreshes standings after a save, so totals update immediately.
+- Wording on the standings column and the admin grade dialog no longer says "display-only".
 
 ## Findings
 
-1. **No new data exposure.** Standings already showed each member's Cristo-Ball total after grading; now it shows earlier. Only point totals are returned, never anyone's individual Cristo-Ball picks or the admin's results. Entries are locked after the Cristo-Ball deadline, so seeing totals mid-season can't be used to change picks.
-2. **Admin-only inputs.** Results are still written only through `/api/admin/cristoball/results` (admin session required, Zod-validated). Nothing new accepts input.
-3. **No writes on read.** Standings compute points in memory; they don't save `pointsEarned`. Grading still happens only when an admin presses Grade.
+1. **No new data exposure.** The live per-member Cristo-Ball totals were already returned to all members by #27; this only adds them into `totalPoints`. No individual picks or new fields are exposed.
+2. **Inputs unchanged.** Actual results are still written only through the admin routes (admin session required, Zod-validated).
+3. **No writes on read.** Standings compute live points in memory; nothing is saved until an admin runs the final grade.
 4. **Storage rule respected; `API_BASE` placeholder untouched.**
 
 ## Testing
 
-`npm run check` passes, `npm test` passes (71 tests, 3 new: no results yet, points so far before grading, graded points after grading). `npm run build` succeeds. The standings page was checked with mocked data: the "so far" label and totals render correctly.
+`npm run check` passes, `npm test` passes (74 tests; the live Cristo-Ball standings test now asserts totals and rank include live points). `npm run build` succeeds.
 
 ## Conclusion
 
-A scoring-display change using existing grading logic and admin-entered data. **Cleared to publish.**
+A scoring change using existing grading logic and admin-entered data, with no new exposure. **Cleared to publish.**

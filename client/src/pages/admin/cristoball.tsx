@@ -99,6 +99,7 @@ export default function AdminCristoBallPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/cristoball"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/standings"] });
       toast({ title: "Actual results saved" });
     },
     onError: (err) => toast({ title: "Couldn't save results", description: err instanceof Error ? err.message : undefined, variant: "destructive" }),
@@ -160,8 +161,8 @@ export default function AdminCristoBallPage() {
             <AlertDialogHeader>
               <AlertDialogTitle>{graded ? "Re-grade Cristo-Ball?" : "Grade Cristo-Ball?"}</AlertDialogTitle>
               <AlertDialogDescription>
-                This computes every member's Cristo-Ball score from the actual results below and adds it into the season
-                standings total. Save the actual results first if you haven't yet.
+                Saved results already count in the standings as points so far. Grading locks in every member's final
+                Cristo-Ball score from the actual results below. Save the actual results first if you haven't yet.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
@@ -398,7 +399,12 @@ export default function AdminCristoBallPage() {
         </CardContent>
       </Card>
 
-      <div className="flex justify-end">
+      <div className="flex flex-col items-end gap-2">
+        <p className="max-w-md text-right text-xs text-muted-foreground">
+          Saving partial results is fine — each member's earned-so-far points show in the standings'
+          Cristo-Ball column as questions are decided, but they don't count toward the official
+          Total until the final grade.
+        </p>
         <Button onClick={() => saveResultsMutation.mutate()} disabled={saveResultsMutation.isPending} data-testid="button-save-actual-results">
           {saveResultsMutation.isPending ? "Saving..." : "Save Actual Results"}
         </Button>

@@ -20,6 +20,7 @@ import {
   CRISTO_BALL_NATIONAL_CHAMP_POINTS,
   CRISTO_BALL_HEISMAN_POINTS,
   CRISTO_BALL_PLAYOFF_TEAM_POINTS,
+  CRISTO_BALL_PLAYOFF_TEAM_COUNT,
 } from "@shared/schema";
 import { outcomeFromScores, coveringTeam, upsetPickPoints } from "@shared/outcome";
 
@@ -215,11 +216,44 @@ export interface StandingsRow {
   userId: number;
   name: string;
   weeklyPoints: Record<number, number>; // weekId -> points
-  cristoBallPoints: number | null; // null = no Cristo-Ball results entered yet
-  cristoBallFinal: boolean; // false = points so far, from results saved before grading
+  cristoBallPoints: number | null; // null = not graded yet (official, counts in total)
+  cristoBallLivePoints: number | null; // earned vs actuals entered so far; null = no actuals yet. Counts in totalPoints until the final grade.
   totalPoints: number;
   rank: number;
   previousRank: number | null; // rank as of the prior graded week; null if not enough graded weeks yet
+}
+
+/**
+ * How many Cristo-Ball questions have a decided actual result entered so far,
+ * out of the full set (conference champs, season questions, choice question,
+ * win totals, national champ, playoff slots, Heisman). The standings UI uses
+ * this to show live Cristo-Ball points only once actuals start coming in.
+ */
+export function cristoBallProgress(results: CristoBallResults | null | undefined): { decided: number; total: number } {
+  let decided = 0;
+  for (const cat of CRISTO_BALL_CATEGORIES) if (results?.actualPicks?.[cat.key]) decided += 1;
+  for (const q of CRISTO_BALL_SEASON_QUESTIONS) {
+    const actual = results?.actualSeasonAnswers?.[q.key];
+    if (actual === true || actual === false) decided += 1;
+  }
+  for (const q of CRISTO_BALL_CHOICE_QUESTIONS) if (results?.actualChoicePicks?.[q.key]) decided += 1;
+  for (const w of CRISTO_BALL_WIN_TOTALS) {
+    const actualWins = results?.actualWinTotals?.[w.key];
+    if (actualWins !== null && actualWins !== undefined) decided += 1;
+  }
+  if (results?.actualNationalChamp) decided += 1;
+  decided += (results?.actualPlayoffTeams ?? []).filter((t) => t && t.trim()).length;
+  if (results?.actualHeisman) decided += 1;
+
+  const total =
+    CRISTO_BALL_CATEGORIES.length +
+    CRISTO_BALL_SEASON_QUESTIONS.length +
+    CRISTO_BALL_CHOICE_QUESTIONS.length +
+    CRISTO_BALL_WIN_TOTALS.length +
+    1 + // national champion
+    CRISTO_BALL_PLAYOFF_TEAM_COUNT +
+    1; // Heisman
+  return { decided, total };
 }
 
 /**
@@ -341,9 +375,8 @@ export function gradeCristoBallEntry(
 
 /**
  * Computes season standings. By default, across all graded weeks, plus
- * Cristo-Ball points: the graded points once Cristo-Ball has been graded, and
- * before that the points earned so far against whatever results an admin has
- * saved (unsettled answers score 0). Ties share the same
+ * Cristo-Ball points: earned so far against the actuals entered until the
+ * final grade, then the official graded points. Ties share the same
  * rank (no tiebreaker), matching the league's historical convention.
  *
  * When `weekIdsFilter` is provided, only picks/upset picks from those weeks
@@ -357,23 +390,29 @@ export async function computeStandings(weekIdsFilter?: number[]): Promise<Standi
   const seasonYear = await getCurrentSeasonYear();
   const cristoBallResults = await storage.getCristoBallResults(seasonYear);
   const cristoBallGraded = !!cristoBallResults?.gradedAt;
+  // Live Cristo-Ball points: once any actual results have been entered, every
+  // entry is graded against them on the fly and counted in totalPoints (and so
+  // in ranks). Once the admin runs the final grade (gradedAt set), the stored
+  // official points replace them.
+  const hasCristoBallActuals = cristoBallResults ? cristoBallProgress(cristoBallResults).decided > 0 : false;
   const cristoBallEntries = cristoBallResults ? await storage.listCristoBallEntries(seasonYear) : [];
   const cristoBallByUser = new Map(cristoBallEntries.map((e) => [e.userId, e]));
+  const cristoBallLiveByUser = new Map<number, number>();
+  if (hasCristoBallActuals && cristoBallResults) {
+    for (const entry of cristoBallEntries) {
+      cristoBallLiveByUser.set(entry.userId, gradeCristoBallEntry(entry, cristoBallResults).total);
+    }
+  }
 
   const totals = new Map<
     number,
-    { name: string; weeklyPoints: Record<number, number>; cristoBallPoints: number | null; total: number }
+    { name: string; weeklyPoints: Record<number, number>; cristoBallPoints: number | null; cristoBallLivePoints: number | null; total: number }
   >();
   for (const u of allUsers) {
-    const entry = cristoBallByUser.get(u.id);
-    const cristoBallPoints = !cristoBallResults
-      ? null
-      : !entry
-        ? 0
-        : cristoBallGraded
-          ? entry.pointsEarned ?? 0
-          : gradeCristoBallEntry(entry, cristoBallResults).total;
-    totals.set(u.id, { name: u.name, weeklyPoints: {}, cristoBallPoints, total: cristoBallPoints ?? 0 });
+    const cristoBallPoints = cristoBallGraded ? cristoBallByUser.get(u.id)?.pointsEarned ?? 0 : null;
+    const cristoBallLivePoints = cristoBallLiveByUser.get(u.id) ?? null;
+    const total = cristoBallPoints ?? cristoBallLivePoints ?? 0;
+    totals.set(u.id, { name: u.name, weeklyPoints: {}, cristoBallPoints, cristoBallLivePoints, total });
   }
 
   for (const week of allWeeks) {
@@ -399,7 +438,7 @@ export async function computeStandings(weekIdsFilter?: number[]): Promise<Standi
     name: v.name,
     weeklyPoints: v.weeklyPoints,
     cristoBallPoints: v.cristoBallPoints,
-    cristoBallFinal: cristoBallGraded,
+    cristoBallLivePoints: v.cristoBallLivePoints,
     totalPoints: v.total,
     rank: 0,
     previousRank: null,
