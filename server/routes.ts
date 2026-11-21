@@ -379,12 +379,28 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // ---------------- CRISTO-BALL ----------------
   app.get("/api/cristoball/me", requireAuth, async (req, res) => {
     const seasonYear = await getCurrentSeasonYear();
-    const [entry, lockDeadline] = await Promise.all([
+    const [entry, lockDeadline, results] = await Promise.all([
       storage.getCristoBallEntry(req.user!.id, seasonYear),
       getCristoBallLockDeadline(seasonYear),
+      storage.getCristoBallResults(seasonYear),
     ]);
     const locked = lockDeadline != null && Date.now() >= new Date(lockDeadline).getTime();
-    res.json({ seasonYear, entry: entry ?? null, locked, lockDeadline });
+    // Once entries are locked, decided actuals are public sports facts — share
+    // them so members can see right/wrong per question as the season resolves.
+    // Never sent before the lock, since picks could still be edited.
+    const actuals =
+      locked && results
+        ? {
+            actualPicks: results.actualPicks,
+            actualSeasonAnswers: results.actualSeasonAnswers,
+            actualChoicePicks: results.actualChoicePicks,
+            actualWinTotals: results.actualWinTotals,
+            actualNationalChamp: results.actualNationalChamp,
+            actualPlayoffTeams: results.actualPlayoffTeams,
+            actualHeisman: results.actualHeisman,
+          }
+        : null;
+    res.json({ seasonYear, entry: entry ?? null, locked, lockDeadline, results: actuals });
   });
 
   app.post("/api/cristoball/me", requireAuth, async (req, res) => {
