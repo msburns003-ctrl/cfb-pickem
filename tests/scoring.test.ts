@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { db, fake, game, pick, resetDb, user, week } from "./fake-storage";
+import { cristoBallEntry, cristoBallResults, db, fake, game, pick, resetDb, user, week } from "./fake-storage";
 
 vi.mock("../server/storage", () => ({ storage: fake }));
-const { ATS_THRESHOLD, assignMoneyGames, computePickType, computeSeasonStats, computeStandings, gradeCompletedGames } = await import("../server/scoring");
+const { ATS_THRESHOLD, assignMoneyGames, computePickType, computeSeasonStats, computeStandings, cristoBallProgress, gradeCompletedGames } = await import("../server/scoring");
 
 beforeEach(resetDb);
 
@@ -109,6 +109,82 @@ describe("standings and season stats", () => {
     // A pick on a game that landed on the spread is a push in records.
     expect(ann.overall).toEqual({ wins: 1, losses: 0, pushes: 1 });
     expect(stats.weeks[0].leagueAverage).toBe(0.7);
+  });
+});
+
+describe("live Cristo-Ball points in standings (display-only)", () => {
+  function setup() {
+    ["Ann", "Bob", "Cat"].forEach((name, i) => user({ id: i + 1, name }));
+    week({ id: 1, status: "graded" });
+    // Ann and Bob have entries; Cat never submitted one.
+    cristoBallEntry({ id: 1, userId: 1, picks: { sec: "Georgia", bigTen: "Oregon" }, seasonAnswers: { power4CoachFired: true }, winTotalPicks: { oklahoma: "under" } });
+    cristoBallEntry({ id: 2, userId: 2, picks: { sec: "Texas" }, seasonAnswers: { power4CoachFired: false }, winTotalPicks: { oklahoma: "over" } });
+  }
+
+  it("grades entries against partial actuals without affecting totals", async () => {
+    setup();
+    cristoBallResults({
+      seasonYear: 2026,
+      actualPicks: { sec: "Georgia" }, // Big Ten champ not decided yet
+      actualSeasonAnswers: { power4CoachFired: true },
+      actualWinTotals: { oklahoma: 6 }, // under 8.5 hits
+    });
+
+    const rows = await computeStandings();
+    const ann = rows.find((r) => r.name === "Ann")!;
+    const bob = rows.find((r) => r.name === "Bob")!;
+    const cat = rows.find((r) => r.name === "Cat")!;
+
+    // Official Cristo-Ball points stay null until the final grade runs.
+    expect(ann.cristoBallPoints).toBeNull();
+    expect(bob.cristoBallPoints).toBeNull();
+    // Live points: SEC (3) + coach fired (1) + Oklahoma under (1) = 5 for Ann.
+    expect(ann.cristoBallLivePoints).toBe(5);
+    // Bob missed everything decided so far (Texas, no on coach fired, Oklahoma over).
+    expect(bob.cristoBallLivePoints).toBe(0);
+    // Cat has no entry, so no live points at all.
+    expect(cat.cristoBallLivePoints).toBeNull();
+    // Display-only: nobody's official total includes live Cristo-Ball points.
+    expect(ann.totalPoints).toBe(0);
+    expect(bob.totalPoints).toBe(0);
+  });
+
+  it("shows no live points before any actuals are entered", async () => {
+    setup();
+    cristoBallResults({ seasonYear: 2026 }); // saved but empty
+
+    const rows = await computeStandings();
+    expect(rows.every((r) => r.cristoBallLivePoints === null)).toBe(true);
+    expect(rows.every((r) => r.cristoBallPoints === null)).toBe(true);
+  });
+
+  it("keeps official points after the final grade", async () => {
+    setup();
+    cristoBallResults({ seasonYear: 2026, actualPicks: { sec: "Georgia" }, gradedAt: "2027-01-10T00:00:00.000Z" });
+    db.cristoBallEntries
+      .filter((e) => e.userId === 1)
+      .forEach((e) => (e.pointsEarned = 3));
+
+    const rows = await computeStandings();
+    const ann = rows.find((r) => r.name === "Ann")!;
+    expect(ann.cristoBallPoints).toBe(3);
+    expect(ann.totalPoints).toBe(3);
+  });
+
+  it("counts decided questions across every section", () => {
+    const progress = cristoBallProgress({
+      seasonYear: 2026,
+      actualPicks: { sec: "Georgia", acc: "Miami" },
+      actualSeasonAnswers: { power4CoachFired: true, kiffinTenWins: false },
+      actualChoicePicks: { firstArrestConference: "SEC" },
+      actualWinTotals: { oklahoma: 6 },
+      actualNationalChamp: "Georgia",
+      actualPlayoffTeams: ["Georgia", "Texas"],
+      actualHeisman: null,
+    });
+    // 2 champs + 2 season answers + 1 choice + 1 win total + 1 national champ + 2 playoff slots
+    expect(progress.total).toBe(41);
+    expect(progress.decided).toBe(9);
   });
 });
 

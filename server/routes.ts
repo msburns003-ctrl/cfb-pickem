@@ -14,6 +14,7 @@ import {
   getCurrentSeasonYear,
   getCristoBallLockDeadline,
   gradeCristoBallEntry,
+  cristoBallProgress,
 } from "./scoring";
 import { insertWeekSchema, type InsertWeek, insertCristoBallEntrySchema, insertCristoBallResultsSchema, insertCristoBallLockDeadlineSchema } from "@shared/schema";
 import { checkGamesForWeek, getLiveScoresForWeek } from "./scores";
@@ -337,6 +338,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const payload = await cached(keys.standings(), 30_000, async () => {
       const rows = await computeStandings();
       const weeks = await storage.listWeeks();
+      // Live Cristo-Ball progress: how many questions have actuals entered so
+      // far. Rows carry cristoBallLivePoints (earned so far, display-only).
+      const cristoBallResults = await storage.getCristoBallResults(await getCurrentSeasonYear());
+      const cristoBall = cristoBallResults ? cristoBallProgress(cristoBallResults) : null;
       const gradedWeeks = weeks.filter((w) => w.status === "graded").sort((a, b) => a.weekNumber - b.weekNumber);
 
       // Rank-change arrows compare the current standings to how they stood
@@ -358,7 +363,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           .filter((w) => w.status === "locked" || (w.status === "open" && now >= new Date(w.pickDeadline).getTime()))
           .sort((a, b) => b.weekNumber - a.weekNumber)[0] ?? null;
 
-      return { rows: rowsWithChange, weeks: gradedWeeks, currentWeek };
+      return { rows: rowsWithChange, weeks: gradedWeeks, currentWeek, cristoBall };
     });
     res.json(payload);
   });
