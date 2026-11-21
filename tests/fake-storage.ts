@@ -84,6 +84,10 @@ export const fake = {
 
   getCristoBallResults: async () => (db.cristoBallResults ? { ...db.cristoBallResults } : undefined),
   listCristoBallEntries: async () => db.cristoBallEntries.map((e) => ({ ...e })),
+  getCristoBallEntry: async (userId: number, _seasonYear: number) => {
+    const entry = db.cristoBallEntries.find((e) => e.userId === userId);
+    return entry ? { ...entry } : undefined;
+  },
 };
 
 // Builders with sensible Cristo-Ball defaults.

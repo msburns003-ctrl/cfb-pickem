@@ -2,7 +2,7 @@ import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import express from "express";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { db, fake, game, pick, resetDb, user, week } from "./fake-storage";
+import { cristoBallResults, db, fake, game, pick, resetDb, user, week } from "./fake-storage";
 
 vi.mock("../server/storage", () => ({ storage: fake }));
 const { registerRoutes } = await import("../server/routes");
@@ -72,6 +72,34 @@ describe("access control", () => {
     expect((await get("/api/admin/members", member)).status).toBe(403);
     const admin = cookieOf(await login("admin@example.com"));
     expect((await get("/api/admin/members", admin)).status).toBe(200);
+  });
+});
+
+describe("cristo-ball live results", () => {
+  it("shares decided actuals with members once entries are locked", async () => {
+    const cookie = cookieOf(await login());
+    cristoBallResults({
+      seasonYear: 2026,
+      actualPicks: { sec: "Georgia" },
+      actualSeasonAnswers: { power4CoachFired: true },
+      lockDeadline: "2026-09-08T00:00:00.000Z", // in the past -> locked
+    });
+    const body = await (await get("/api/cristoball/me", cookie)).json();
+    expect(body.locked).toBe(true);
+    expect(body.results.actualPicks.sec).toBe("Georgia");
+    expect(body.results.actualSeasonAnswers.power4CoachFired).toBe(true);
+  });
+
+  it("hides actuals before the lock deadline so picks can't be gamed", async () => {
+    const cookie = cookieOf(await login());
+    cristoBallResults({
+      seasonYear: 2026,
+      actualPicks: { sec: "Georgia" },
+      lockDeadline: "2099-01-01T00:00:00.000Z", // future -> not locked
+    });
+    const body = await (await get("/api/cristoball/me", cookie)).json();
+    expect(body.locked).toBe(false);
+    expect(body.results).toBeNull();
   });
 });
 
