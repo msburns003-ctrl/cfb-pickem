@@ -18,7 +18,7 @@ Then read [`docs/PROJECT_NOTES.md`](docs/PROJECT_NOTES.md): current status, open
 
 ```bash
 npm install
-cp .env.example .env   # then fill in SUPABASE_URL and SUPABASE_ANON_KEY
+cp .env.example .env   # then fill in SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY
 npm run dev            # Express + Vite dev server on http://localhost:5000
 npm run check          # TypeScript type check (must pass before committing)
 npm test               # Vitest tests (must pass before committing; CI runs them on every PR)
@@ -30,7 +30,8 @@ Environment variables (`.env`, never committed):
 | Variable | Purpose |
 |---|---|
 | `SUPABASE_URL` | Supabase project URL |
-| `SUPABASE_ANON_KEY` | Supabase anon key used by the server |
+| `SUPABASE_SERVICE_ROLE_KEY` | Server-only Supabase secret key (`sb_secret_...`, or the legacy `service_role` key). Bypasses row level security. Never put this in client code, logs, or git. |
+| `SUPABASE_ANON_KEY` | Temporary fallback only. Used when the secret key is missing or is not actually a secret key, so a deploy before the new variable is set does not take the site down. The server logs an error until the secret key is in use. The browser never uses this key. |
 | `PORT` | Optional, defaults to 5000 |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `MAIL_FROM` | Optional. Outgoing email for "forgot password" (e.g. Gmail with an app password). |
 | `APP_URL` | Optional. The site's public `https://` address, used in reset links. |
@@ -72,6 +73,7 @@ shared/schema.ts        types and Zod validation shared by client and server
 script/build.ts         production build
 script/seed.ts          one-time admin seed (generates a random temp password)
 supabase_migration.sql  database schema
+supabase_rls_lockdown.sql  enable RLS and revoke anon access; run by hand only after the secret key is deployed
 add_members.py          bulk member add (prompts for admin credentials)
 security_review_*.md    past security reviews
 tests/                  Vitest tests (in-memory stand-in for Supabase in tests/fake-storage.ts)
@@ -97,6 +99,7 @@ Security rules:
 - **No `localStorage`, `sessionStorage`, or `indexedDB` anywhere in the client bundle.** The session lives in an httpOnly cookie only. Small per-device preferences (like the theme) use a `__Host-` cookie instead. No service worker or Cache Storage.
 - **Cookie names must use the `__Host-` prefix** (`Secure`, `Path=/`, no `Domain`). The pplx.app proxy drops any other cookie name.
 - **Never commit secrets**: no passwords, API keys, Supabase keys, or member credential files. `.env`, `*.db` files, and `league_members_temp_passwords.csv` are git-ignored; keep it that way.
+- **The Supabase secret key stays on the server.** `SUPABASE_SERVICE_ROLE_KEY` is read only in `server/supabase.ts`. Do not prefix it for Vite, do not import that module from the client, and do not log the value. The public anon key is a temporary fallback and must not be given policies.
 - Passwords are hashed with scrypt in `salt:hash` format (`server/auth.ts`). Never log or return password hashes or session tokens.
 - Rate limits are keyed by account, never by IP (`server/rate-limit.ts`): the host's proxy hides client IPs and members often share a network. Login is locked per account after 5 failures in 15 minutes; authenticated requests are capped per member inside `requireAuth`.
 - Every `/api/admin/*` route must require an admin session. Validate request bodies with Zod.

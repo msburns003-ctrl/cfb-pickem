@@ -2,15 +2,16 @@
 
 Living notes so a new session (or person) can pick up where the last one left off. `CLAUDE.md` holds the rules; this file holds the state. Update it when something here changes.
 
-_Last updated: November 21, 2026._
+_Last updated: November 25, 2026._
 
 ## Status
 
 - All work through pull request #21 is merged into `main`. **Pushing to GitHub doesn't update the live site** — it changes only when the commissioner publishes through Perplexity Computer. Check with the commissioner what has been published before assuming something is live.
-- CI (`.github/workflows/ci.yml`) runs type check, 63 tests and the build on every pull request. GitHub doesn't block merges on it unless branch protection is turned on (repo Settings → Branches).
+- CI (`.github/workflows/ci.yml`) runs type check, 85 tests and the build on every pull request. GitHub doesn't block merges on it unless branch protection is turned on (repo Settings → Branches).
 
 ## Waiting on the commissioner
 
+- **Lock down Supabase, in this order.** The code prefers `SUPABASE_SERVICE_ROLE_KEY` and, until that variable is a real secret key, keeps using the anon key and logs `still using the public anon key` every 15 minutes. That fallback is what keeps a publish from taking the site down. Do not run `supabase_rls_lockdown.sql` until the secret key is set on the host, this code is published, and that log line has stopped. Step-by-step is in the pull request. After the SQL has been run, local `.env` needs the same secret key or `npm run dev` cannot read the database.
 - **Publish** the latest `main` through Perplexity.
 - **Forgot password** is off until these are set on the host: `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `MAIL_FROM`, `APP_URL`, `RESET_TOKEN_SECRET` (see `.env.example`; Gmail steps in the README).
 - **Optional:** turn on branch protection so a failing check blocks merging.
@@ -30,7 +31,8 @@ ESPN is blocked from the dev environment, so these were tested only with stubbed
 
 - **One session token per member, shared across devices** (`server/routes.ts` login). Logging in on a new device no longer logs out the others; logout is per device; changing the password (or an admin reset) signs out everywhere. Trade-off: logout doesn't revoke the token server-side. The full fix is a per-device sessions table (needs a migration).
 - **Rate limits are keyed by account, never IP** (`server/rate-limit.ts`). Login locks an account after 5 failures in 15 minutes, even for the right password. Trade-off: someone who knows a member's email can keep that account locked; the member gets in via Forgot password or an admin reset. The August pull request #1 (IP-based, by Kevin Harris) was closed in favor of #20; see its comment for why.
-- **No database changes** were made: logos come from ESPN's teams list in memory, reset links are signed (no table), stats are computed from graded picks.
+- **No database changes** were made by the app itself: logos come from ESPN's teams list in memory, reset links are signed (no table), stats are computed from graded picks. `supabase_rls_lockdown.sql` is a hand-run script and has not been applied.
+- **Supabase secret key, with a temporary anon fallback** (Nov 25): the server uses `SUPABASE_SERVICE_ROLE_KEY` (`sb_secret_...` or the legacy `service_role` JWT). A missing, public, or unrecognized value falls back to `SUPABASE_ANON_KEY` and logs an error that repeats every 15 minutes. The fallback is temporary so publishing before the host variable is set does not blank the site, and so a wrong paste (the anon or publishable key) is not sent to Supabase as if it were the secret. New secret keys are sent on the `apikey` header only; PostgREST rejects them on `Authorization`. The key is never logged and is not in the client bundle. The browser and `add_members.py` only call `/api/...`. There are no views and no `.rpc()` calls. Enabling RLS with no policies is safe for the server because `service_role` has `BYPASSRLS` and keeps its table grants; the lockdown script also revokes anon/authenticated table, sequence, and `rls_auto_enable()` execute privileges (including `PUBLIC`, because that grant is what still lets anon execute the function).
 - **Per-device preferences use `__Host-` cookies** (theme, install-banner dismissal), never browser storage.
 - **Home-screen app has no service worker or offline mode** (would need on-device storage).
 - **The league split ("how you compare")** is only shown for games past kickoff, so it can't influence picks.
@@ -50,7 +52,6 @@ ESPN is blocked from the dev environment, so these were tested only with stubbed
 ## Backlog (ideas, not started)
 
 - Pick reminders and a “7 of 12 picked” progress bar.
-- Lock down Supabase: server uses the private service key; turn on row-level security so the anon key can't read tables.
 - Per-device sessions table (revocable logout, hashed tokens).
 - Admin status panel: last ESPN fetch, last auto-grade run, teams without a logo match.
 - A separate test Supabase project with fake data.

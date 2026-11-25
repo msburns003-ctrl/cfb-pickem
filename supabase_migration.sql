@@ -1,7 +1,11 @@
 -- CFB Pick'em schema (Postgres / Supabase)
--- These tables are only ever accessed by the trusted Express backend using
--- the anon key; the app implements its own auth/authorization, so RLS is
--- disabled intentionally (no direct client access to these tables).
+-- The Express server is the only client of these tables. It connects with
+-- the Supabase secret key (SUPABASE_SERVICE_ROLE_KEY), which bypasses row
+-- level security. The browser never talks to Supabase.
+--
+-- Do not disable row level security. The lockdown script is
+-- supabase_rls_lockdown.sql and must be run only after the live server is
+-- using that secret key. Re-running this file does not turn RLS off.
 
 create table if not exists users (
   id serial primary key,
@@ -74,11 +78,7 @@ create table if not exists upset_picks (
   unique (week_id, user_id)
 );
 
-alter table users disable row level security;
-alter table weeks disable row level security;
-alter table games disable row level security;
-alter table picks disable row level security;
-alter table upset_picks disable row level security;
+-- RLS is intentionally not disabled here. See supabase_rls_lockdown.sql.
 
 -- Cristo-Ball (season-long preseason predictions)
 create table if not exists cristo_ball_entries (
@@ -112,5 +112,4 @@ create table if not exists cristo_ball_results (
   graded_at timestamptz
 );
 
-alter table cristo_ball_entries disable row level security;
-alter table cristo_ball_results disable row level security;
+-- RLS is intentionally not disabled here. See supabase_rls_lockdown.sql.
