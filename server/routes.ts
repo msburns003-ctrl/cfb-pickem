@@ -21,6 +21,7 @@ import { checkGamesForWeek, getLiveScoresForWeek } from "./scores";
 import { autoGradeEnabled, getAutoGradeStatus } from "./auto-grade";
 import { importEspnGamesForWeek } from "./schedule";
 import { getTeamInfo } from "./teams";
+import { supabaseConnectionStatus } from "./supabase";
 import { clearLoginFailures, lockoutMessage, loginLocked, recordLoginFailure } from "./rate-limit";
 import { passwordResetEnabled, requestPasswordReset, verifyResetToken } from "./password-reset";
 import { z } from "zod";
@@ -436,6 +437,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
     });
     next();
+  });
+
+  app.get("/api/admin/db-key-status", requireAdmin, async (_req, res) => {
+    try {
+      res.json(supabaseConnectionStatus());
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      // Resolution errors name the missing variable; they never include key material.
+      res.status(500).json({ message: "Could not resolve the database key configuration.", detail: message });
+    }
   });
 
   app.get("/api/admin/cristoball", requireAdmin, async (_req, res) => {

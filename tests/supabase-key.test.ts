@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { createSupabaseFetch, resolveSupabaseKey, serviceKeyProblem } from "../server/supabase-key";
+import {
+  createRelayFetch,
+  createSupabaseFetch,
+  findSupabaseRelayCredential,
+  resolveSupabaseConnection,
+  resolveSupabaseKey,
+  serviceKeyProblem,
+} from "../server/supabase-key";
 
 const CANARY_SECRET = "sb_secret_CANARY_DO_NOT_LEAK";
 const CANARY_ANON = "sb_publishable_CANARY_ANON_DO_NOT_LEAK";
@@ -149,5 +156,126 @@ describe("createSupabaseFetch", () => {
       globalThis.fetch = original;
     }
     expect(authorization).toBe(`Bearer ${serviceJwt}`);
+  });
+});
+
+const CANARY_RELAY_URL = "https://relay.example.test/ooamcrjoonfsehfxzjiu.supabase.co";
+const CANARY_RELAY_TOKEN = "agp-canary-relay-token-DO_NOT_LEAK";
+
+function relayEnv(extra: Record<string, string> = {}): Record<string, string> {
+  return {
+    SUPABASE_URL: "https://ooamcrjoonfsehfxzjiu.supabase.co",
+    SUPABASE_ANON_KEY: anonJwt,
+    CUSTOM_CRED_OOAMCRJOONFSEHFXZJIU_SUPABASE_CO_URL: CANARY_RELAY_URL,
+    CUSTOM_CRED_OOAMCRJOONFSEHFXZJIU_SUPABASE_CO_PROXY_AUTH_KEY: CANARY_RELAY_TOKEN,
+    ...extra,
+  };
+}
+
+describe("findSupabaseRelayCredential", () => {
+  it("finds a complete relay pair", () => {
+    const relay = findSupabaseRelayCredential(relayEnv());
+    expect(relay).toEqual({ url: CANARY_RELAY_URL, token: CANARY_RELAY_TOKEN });
+  });
+
+  it("ignores a pair whose token variable is missing or blank", () => {
+    const partial = {
+      SUPABASE_URL: "https://ooamcrjoonfsehfxzjiu.supabase.co",
+      CUSTOM_CRED_OOAMCRJOONFSEHFXZJIU_SUPABASE_CO_URL: CANARY_RELAY_URL,
+      CUSTOM_CRED_OOAMCRJOONFSEHFXZJIU_SUPABASE_CO_PROXY_AUTH_KEY: "  ",
+    };
+    expect(findSupabaseRelayCredential(partial)).toBeNull();
+    expect(findSupabaseRelayCredential({})).toBeNull();
+  });
+
+  it("disambiguates multiple pairs by the Supabase host", () => {
+    const relay = findSupabaseRelayCredential(
+      relayEnv({
+        CUSTOM_CRED_OTHER_HOST_COM_URL: "https://relay.example.test/other-host",
+        CUSTOM_CRED_OTHER_HOST_COM_PROXY_AUTH_KEY: "agp-other-token-DO_NOT_LEAK",
+      }),
+    );
+    expect(relay).toEqual({ url: CANARY_RELAY_URL, token: CANARY_RELAY_TOKEN });
+  });
+
+  it("refuses to guess when several pairs are ambiguous", () => {
+    const relay = findSupabaseRelayCredential({
+      SUPABASE_URL: "https://ooamcrjoonfsehfxzjiu.supabase.co",
+      SUPABASE_ANON_KEY: anonJwt,
+      CUSTOM_CRED_FIRST_HOST_COM_URL: "https://relay-one.example.test/opaque-path",
+      CUSTOM_CRED_FIRST_HOST_COM_PROXY_AUTH_KEY: "agp-first-token-DO_NOT_LEAK",
+      CUSTOM_CRED_SECOND_HOST_COM_URL: "https://relay-two.example.test/other-opaque",
+      CUSTOM_CRED_SECOND_HOST_COM_PROXY_AUTH_KEY: "agp-second-token-DO_NOT_LEAK",
+    });
+    expect(relay).toBeNull();
+  });
+});
+
+describe("resolveSupabaseConnection", () => {
+  it("uses the credential relay when no secret key is set", () => {
+    const connection = resolveSupabaseConnection(relayEnv());
+    expect(connection.source).toBe("relay");
+    expect(connection.url).toBe(CANARY_RELAY_URL);
+    expect(connection.key).toBe(CANARY_RELAY_TOKEN);
+    expect(connection.warning).toBeNull();
+    expect(connection.fetch).toBeTypeOf("function");
+  });
+
+  it("prefers a valid secret key over the relay", () => {
+    const connection = resolveSupabaseConnection(
+      relayEnv({ SUPABASE_SERVICE_ROLE_KEY: CANARY_SECRET }),
+    );
+    expect(connection.source).toBe("service_role");
+    expect(connection.url).toBe("https://ooamcrjoonfsehfxzjiu.supabase.co");
+    expect(connection.key).toBe(CANARY_SECRET);
+  });
+
+  it("uses the relay when the secret variable holds a public key", () => {
+    const connection = resolveSupabaseConnection(
+      relayEnv({ SUPABASE_SERVICE_ROLE_KEY: CANARY_ANON }),
+    );
+    expect(connection.source).toBe("relay");
+    expect(connection.key).toBe(CANARY_RELAY_TOKEN);
+  });
+
+  it("still falls back to anon with a loggable warning when there is no relay", () => {
+    const connection = resolveSupabaseConnection({
+      SUPABASE_URL: "https://ooamcrjoonfsehfxzjiu.supabase.co",
+      SUPABASE_ANON_KEY: anonJwt,
+    });
+    expect(connection.source).toBe("anon_fallback");
+    expect(connection.warning).toContain("still using the public anon key");
+    expect(connection.warning).not.toContain(CANARY_RELAY_TOKEN);
+    expect(connection.warning).not.toContain(CANARY_RELAY_URL);
+  });
+});
+
+describe("createRelayFetch", () => {
+  it("sends the relay token as x-api-key and drops Authorization", async () => {
+    const fetchImpl = createRelayFetch(CANARY_RELAY_TOKEN);
+    const original = globalThis.fetch;
+    let xApiKey: string | null = null;
+    let authorization: string | null = null;
+    let apikey: string | null = null;
+    globalThis.fetch = (async (_input: unknown, init?: RequestInit) => {
+      const headers = new Headers(init?.headers);
+      xApiKey = headers.get("x-api-key");
+      authorization = headers.get("Authorization");
+      apikey = headers.get("apikey");
+      return new Response("ok");
+    }) as typeof fetch;
+    try {
+      await fetchImpl("https://example.test/rest/v1/users", {
+        headers: {
+          apikey: anonJwt,
+          Authorization: `Bearer ${anonJwt}`,
+        },
+      });
+    } finally {
+      globalThis.fetch = original;
+    }
+    expect(xApiKey).toBe(CANARY_RELAY_TOKEN);
+    expect(authorization).toBeNull();
+    expect(apikey).toBe(anonJwt);
   });
 });
