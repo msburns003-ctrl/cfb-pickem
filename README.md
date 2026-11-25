@@ -54,7 +54,7 @@ Requires Node.js and npm.
 
 ```bash
 npm install
-cp .env.example .env   # fill in SUPABASE_URL and SUPABASE_ANON_KEY
+cp .env.example .env   # fill in SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY
 npm run dev            # http://localhost:5000
 ```
 
@@ -67,6 +67,8 @@ npm run dev            # http://localhost:5000
 | `npm start` | Run the production build |
 
 Optional: `AUTO_GRADE=on|off` in `.env`. Automatic scoring and next-week setup run in production and are off in local dev by default; leave them off locally unless you mean to write to the production database.
+
+The server talks to Supabase with `SUPABASE_SERVICE_ROLE_KEY`, the secret key from Supabase → Project Settings → API Keys (it starts with `sb_secret_`). The legacy `service_role` key also works. Do not put the anon or publishable key in that variable, and do not commit it. `SUPABASE_ANON_KEY` is only a temporary fallback: if the secret key is missing, the server keeps using it and logs an error so the site stays up. After `supabase_rls_lockdown.sql` has been run, local dev needs the secret key too, because the anon key can no longer read the database.
 
 ### Turning on "forgot password"
 
@@ -87,7 +89,8 @@ server/            Express API, auth, scoring, Supabase storage
   schedule.ts      imports a week's games and lines from ESPN
 shared/schema.ts   Zod schemas and types shared by client and server
 script/            build and one-time admin seed
-supabase_migration.sql   database schema
+supabase_migration.sql       database schema
+supabase_rls_lockdown.sql     turn on row level security; run by hand only after the secret key is live
 ```
 
 ## Deployment
@@ -105,5 +108,6 @@ Pushing to GitHub does **not** update the live site. The site is published from 
 - All `/api/admin/*` routes require an admin session.
 - Login locks an account for 15 minutes after 5 failed attempts; each member's requests are capped well above normal use. Limits are per account, so members sharing Wi-Fi never share a limit.
 - Never commit secrets. `.env` and member credential files are git-ignored.
+- The Supabase secret key (`SUPABASE_SERVICE_ROLE_KEY`) is server-only. It is not in the browser bundle. The public anon key cannot read the league tables once `supabase_rls_lockdown.sql` has been run in the Supabase SQL editor. Run that file only after the secret key is set on the host and the new code is published. The steps are in that file and in the pull request that added it.
 
 See [`CLAUDE.md`](CLAUDE.md) for the full contributor guide.
