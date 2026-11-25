@@ -31,6 +31,7 @@ Environment variables (`.env`, never committed):
 |---|---|
 | `SUPABASE_URL` | Supabase project URL |
 | `SUPABASE_SERVICE_ROLE_KEY` | Server-only Supabase secret key (`sb_secret_...`, or the legacy `service_role` key). Bypasses row level security. Never put this in client code, logs, or git. |
+| `CUSTOM_CRED_*_URL` / `CUSTOM_CRED_*_PROXY_AUTH_KEY` | Not set by hand. Injected by pplx.app when the saved Supabase credential is attached to the publish; the server then reaches Supabase through that relay (the real secret key is attached upstream). Resolution order: valid secret key → relay → anon fallback. |
 | `SUPABASE_ANON_KEY` | Temporary fallback only. Used when the secret key is missing or is not actually a secret key, so a deploy before the new variable is set does not take the site down. The server logs an error until the secret key is in use. The browser never uses this key. |
 | `PORT` | Optional, defaults to 5000 |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `MAIL_FROM` | Optional. Outgoing email for "forgot password" (e.g. Gmail with an app password). |

@@ -7,7 +7,7 @@
 // fallback path returns a warning that is safe to log: it names the problem
 // and never includes key material.
 
-export type SupabaseKeySource = "service_role" | "anon_fallback";
+export type SupabaseKeySource = "service_role" | "relay" | "anon_fallback";
 
 export interface ResolvedSupabaseKey {
   key: string;
@@ -121,4 +121,108 @@ export function createSupabaseFetch(key: string): typeof fetch | undefined {
     }
     return fetch(input, { ...init, headers });
   };
+}
+
+// The website credential relay. On pplx.app, a custom credential the commissioner
+// saves (Supabase's secret key) is not exposed to the app as a raw environment
+// variable. Instead the host injects a pair of sandbox env vars:
+//   CUSTOM_CRED_<HOST>_URL          a relay base URL that stands in for the API host
+//   CUSTOM_CRED_<HOST>_PROXY_AUTH_KEY  a token the backend sends as x-api-key
+// Requests through the relay are forwarded to Supabase with the real secret key
+// attached, so the key itself never enters the app's environment or logs. The
+// names are matched by prefix and suffix rather than the exact host so a renamed
+// variable keeps working.
+
+export interface RelayCredential {
+  /** Relay base URL to use as the Supabase client's URL. */
+  url: string;
+  /** Token sent as x-api-key to authorize the app to the relay. */
+  token: string;
+}
+
+function hostFromUrl(value: string): string | null {
+  try {
+    return new URL(value).hostname.toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Find the credential relay for this project's Supabase host, if the host
+ * attached one. Returns null when no complete pair is present, or when several
+ * pairs exist and none unambiguously belongs to this project (an ambiguous relay
+ * must not be used: pointing the client at the wrong host's relay would send the
+ * database credentials somewhere else).
+ */
+export function findSupabaseRelayCredential(env: NodeJS.ProcessEnv): RelayCredential | null {
+  const supabaseUrl = normalize(env.SUPABASE_URL);
+  const supabaseHost = supabaseUrl ? hostFromUrl(supabaseUrl) : null;
+
+  const matches: RelayCredential[] = [];
+  for (const name of Object.keys(env)) {
+    if (!name.startsWith("CUSTOM_CRED_") || !name.endsWith("_URL")) continue;
+    const tokenName = name.slice(0, -"_URL".length) + "_PROXY_AUTH_KEY";
+    const url = normalize(env[name]);
+    const token = normalize(env[tokenName]);
+    if (!url || !token || hostFromUrl(url) === null) continue;
+    matches.push({ url, token });
+  }
+
+  if (matches.length === 0) return null;
+  if (matches.length === 1) return matches[0];
+  if (!supabaseHost) return null;
+  // Relay URLs are proxy addresses; the target host, when present, appears
+  // anywhere in the URL (host or path), not necessarily as the hostname.
+  const forThisHost = matches.filter((match) => match.url.toLowerCase().includes(supabaseHost));
+  return forThisHost.length === 1 ? forThisHost[0] : null;
+}
+
+/**
+ * Fetch wrapper for relay connections. Sends the proxy auth token as x-api-key
+ * (that is how the relay recognizes this app) and removes Authorization: the
+ * relay replaces credentials upstream, and a stale bearer token left on the
+ * request would reach PostgREST and break opaque sb_secret_ keys
+ * ("Expected 3 parts in JWT").
+ */
+export function createRelayFetch(token: string): typeof fetch {
+  return (input, init) => {
+    const headers = new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined));
+    headers.set("x-api-key", token);
+    headers.delete("Authorization");
+    return fetch(input, { ...init, headers });
+  };
+}
+
+export interface ResolvedSupabaseConnection {
+  /** Base URL for the Supabase client. The relay URL when going through the relay. */
+  url: string;
+  /** Key handed to supabase-js. The relay overrides it upstream when used. */
+  key: string;
+  source: SupabaseKeySource;
+  /** Set when the server is not using a service-level key. Safe to log. */
+  warning: string | null;
+  /** Set when the connection needs a custom fetch (relay or sb_secret_ keys). */
+  fetch?: typeof fetch;
+}
+
+/**
+ * Resolve how the server should reach Supabase: a directly configured secret key
+ * first, then the host's credential relay, then the temporary anon fallback.
+ * Throws only when nothing at all is usable.
+ */
+export function resolveSupabaseConnection(env: NodeJS.ProcessEnv): ResolvedSupabaseConnection {
+  const baseUrl = normalize(env.SUPABASE_URL);
+  const serviceKey = normalize(env.SUPABASE_SERVICE_ROLE_KEY);
+  if (serviceKey && serviceKeyProblem(serviceKey) === null) {
+    return { url: baseUrl, key: serviceKey, source: "service_role", warning: null, fetch: createSupabaseFetch(serviceKey) };
+  }
+
+  const relay = findSupabaseRelayCredential(env);
+  if (relay) {
+    return { url: relay.url, key: relay.token, source: "relay", warning: null, fetch: createRelayFetch(relay.token) };
+  }
+
+  const resolved = resolveSupabaseKey(env);
+  return { url: baseUrl, key: resolved.key, source: resolved.source, warning: resolved.warning };
 }
